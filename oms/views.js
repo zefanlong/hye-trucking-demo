@@ -6,7 +6,7 @@ import {
   quoteModes, shipmentMode, quoteEntry, equipmentTypes, equipmentSummary, addressContactFields, ticketStatuses, ticketCategories, billHref,
   caseTypes, caseKind, caseRoute, caseHref, caseCategory, disputeReasons, claimReasons,
   canClaimOrder, canRequestOrderChange, editableOrderStops, orderStopValues, orderChangeLabels, orderStopLabel, customShipmentStops, customCargoRoute, customRequestStatuses, customRequestStatus, customChangeTicket
-} from './model.js?v=warp-v2-4';
+} from './model.js?v=warp-sandbox-booking-1';
 import { customRequestChanges } from './custom-changes.js?v=account-layout';
 import { callingCodes, parsePhone } from './phone-input.js?v=phone-input-2';
 
@@ -190,6 +190,7 @@ function sideFields(shipment, side, details = null, complete = false) {
       <section class="stop-section" aria-labelledby="${side}-time-heading">
         <h3 id="${side}-time-heading">时间安排</h3>
         ${stopHoursFields(details, side)}
+        ${details.sandboxCheckout ? selectField('地点时区（沙盒下单）', side + 'Timezone', { '': '请选择实际当地时区', ...zones }, details[side + 'Timezone'] || '', true) + (!pickup ? field({ label: '送货日期（当地）', name: 'destinationDate', type: 'date', value: details.destinationDate || '', required: true }) : '') : ''}
         ${pickup ? pickupTimeFields(shipment, details) : ''}
       </section>
       <section class="stop-section" aria-labelledby="${side}-handoff-heading">
@@ -645,7 +646,7 @@ export function carrierQuotes(quote, booked = null, rates = quote.rates) {
         </dl>
         <div class="rate-amount"><strong>${money(rate.total)}</strong><span class="note">USD</span>${action}</div>
       </div>
-      ${rate.provider ? `<div class="rate-costs"><span>API 总价 <strong>${money(rate.total)}</strong></span><details><summary>费用明细</summary><div class="panel-inset"><p class="note">报价编号 ${e(rate.reference)} · ${e(new Date(rate.provider.fetchedAt).toLocaleString('zh-CN'))} 获取</p>${rate.provider.substituted ? '<p class="notice">共享 LTL 已替换为专车，请核对运输方案。</p>' : ''}${rate.provider.charges?.length ? `<dl class="detail-list">${rate.provider.charges.map(row => `<div><dt>${e(row.description || row.code)}</dt><dd>${money(row.cents)}</dd></div>`).join('')}</dl><p class="note">${rate.provider.chargesReconcile ? '费用分项合计与总价一致' : '分项口径未能核对，请以 API 总价为准'}</p>` : ''}<p class="note">Sandbox 参考价，非生产报价或 HYE 最终售价；下单未开放。</p></div></details></div>` : `<div class="rate-costs"><span>运输费 <strong>${money(rate.freight)}</strong></span><span>附加费 <strong>${money(rate.accessorial)}</strong></span></div>`}
+      ${rate.provider ? `<div class="rate-costs"><span>API 总价 <strong>${money(rate.total)}</strong></span><details><summary>费用明细</summary><div class="panel-inset"><p class="note">报价编号 ${e(rate.reference)} · ${e(new Date(rate.provider.fetchedAt).toLocaleString('zh-CN'))} 获取</p>${rate.provider.substituted ? '<p class="notice">共享 LTL 已替换为专车，请核对运输方案。</p>' : ''}${rate.provider.charges?.length ? `<dl class="detail-list">${rate.provider.charges.map(row => `<div><dt>${e(row.description || row.code)}</dt><dd>${money(row.cents)}</dd></div>`).join('')}</dl><p class="note">${rate.provider.chargesReconcile ? '费用分项合计与总价一致' : '分项口径未能核对，请以 API 总价为准'}</p>` : ''}<p class="note">Sandbox 参考价，非生产报价或 HYE 最终售价；仅可在本机测试会话确认沙盒下单。</p></div></details></div>` : `<div class="rate-costs"><span>运输费 <strong>${money(rate.freight)}</strong></span><span>附加费 <strong>${money(rate.accessorial)}</strong></span></div>`}
     </article>`;
   }).join('');
   const empty = quote.rates.length ? '没有符合筛选条件的报价' : '暂无可选报价';
@@ -783,7 +784,7 @@ export function quoteSummary(quote, message = '', review = false) {
   const breakdown = rate ? detailList(timing) + feeBreakdown(rate, true) : '';
   const compactPrice = rate ? `<div class="quote-total"><span class="note">预计合计 (USD)</span><strong>${money(rate.total)}</strong><p class="note">${e(rate.days)}${quote.shipment.pickupDate && rate.businessDays?.length ? ' · 预计 ' + e(arrival) + ' 送达' : ''}</p></div>
     <details class="quote-fees"><summary class="sub-disclosure"><strong>费用明细与有效期</strong>${icon('chev')}</summary><div class="quote-fees-body">${breakdown}</div></details>` : '';
-  const reviewPrice = rate ? `<div class="review-price"><span class="note">${state === 'valid' ? '本次扣款金额 (USD)' : '已选报价合计 (USD)'}</span><strong>${money(rate.total)}</strong></div>
+  const reviewPrice = rate ? `<div class="review-price"><span class="note">${rate.provider ? '沙盒确认金额 (USD)' : state === 'valid' ? '本次扣款金额 (USD)' : '已选报价合计 (USD)'}</span><strong>${money(rate.total)}</strong></div>
     ${detailList(timing, 'review-rate-timing')}${detailList(feeRows(rate), 'fees review-fees')}` : '';
   return `
     <div class="detail-block">
@@ -794,7 +795,9 @@ export function quoteSummary(quote, message = '', review = false) {
       ${message ? '<p class="note" role="status">' + e(message) + '</p>' : ''}
       ${rateActions(quote, review)}
     </div>
-    ${rate?.provider ? '<p class="notice">WARP 供应商参考价，仅供查价；下单与扣款未开放。</p><button class="btn primary" type="button" disabled>真实下单未开放</button>' : review
+    ${rate?.provider ? (rate.provider.bookingHandle
+      ? (review ? `<p class="notice">仅提交 WARP 测试环境订单。供应商可能返回待付款；OMS 独立测试账本仅在非待付款订单上记账，HYE 客户余额不变。</p><button class="btn primary" type="button" data-action="confirm-booking" data-quote="${e(quote.id)}"${state === 'valid' ? '' : ' disabled'}>确认沙盒下单及测试结算 ${money(rate.total)}</button>` : '<p class="note">已启用 WARP 沙盒下单；请补全联系人、实际时区和未来时间窗口。</p>' + quickRates(quote, state) + '<button class="btn primary" type="submit" form="details-form">核对沙盒订单</button>')
+      : '<p class="notice">请更新报价以建立服务端沙盒订单快照。线上正式下单仍未开放。</p><button class="btn primary" type="button" disabled>更新报价后可沙盒下单</button>') : review
       ? `<p class="note">确认下单时按所选报价扣款。本页面仅模拟扣款。</p><button class="btn primary" type="button" data-action="confirm-booking" data-quote="${e(quote.id)}"${state === 'valid' ? '' : ' disabled'}>确认下单并扣款</button>`
       : quickRates(quote, state) + '<button class="btn primary" type="submit" form="details-form">核对订单</button>'}`;
 }
@@ -886,7 +889,7 @@ export function cargoEditor(quote, units, stops = null) {
 
 export function detailsView(quote, addresses, units) {
   const { shipment } = quote;
-  const details = { ...quote.details };
+  const details = { ...quote.details, sandboxCheckout: Boolean(selectedRate(quote)?.provider?.bookingHandle) };
   for (const side of ['origin', 'destination']) {
     const saved = addresses.find(address => addressValue(address) === displayAddress(shipment[side]));
     if (!saved) continue;
@@ -965,7 +968,8 @@ function shipmentStopCard(shipment, details, side, scope) {
   const heading = `${scope}-${side}-heading`;
   const company = details[side + 'Company'];
   const date = pickup ? shipment.pickupDate : shipment.deliveryDate;
-  const schedule = scope === 'custom' ? [['期望日期（当地）', e(date)]] : pickup ? [['提货窗口', pickupWindowText(shipment, details)]] : [];
+  const schedule = scope === 'custom' ? [['期望日期（当地）', e(date)]] : pickup ? [['提货窗口', pickupWindowText(shipment, details)]] : details.destinationDate ? [['送货日期（当地）', e(details.destinationDate)]] : [];
+  if (details[side + 'Timezone']) schedule.push(['地点时区', e(zones[details[side + 'Timezone']] || details[side + 'Timezone'])]);
   return `<section class="panel review-stop" aria-labelledby="${heading}">
     <header class="review-stop-heading"><span class="overview-pin${pickup ? '' : ' destination'}" aria-hidden="true">${pickup ? 'A' : 'B'}</span><h3 class="subhead" id="${heading}">${label}信息</h3></header>
     <div class="review-stop-body">
@@ -1165,7 +1169,8 @@ export function billRows(bills, selectedId, { type, ordersById }) {
 }
 function tracking(order) {
   if (order.status === 'cancelled') return '';
-  const stages = Object.entries(orderStatuses).filter(([id]) => id !== 'cancelled');
+  if (order.status === 'awaiting_payment') return '<p class="note">供应商待付款，尚未确认运输安排。</p>';
+  const stages = Object.entries(orderStatuses).filter(([id]) => !['cancelled', 'awaiting_payment'].includes(id));
   const progress = stages.findIndex(([id]) => id === order.status);
   return `<ol class="order-progress" aria-label="运输节点">${stages.map(([id, name], index) =>
     `<li${index <= progress ? ' class="done"' : ''}${id === order.status ? ' aria-current="step"' : ''}><span class="order-progress-dot" aria-hidden="true"></span><span>${name}</span></li>`
@@ -1173,6 +1178,7 @@ function tracking(order) {
 }
 
 function orderOverviewSchedule(order) {
+  if (order.status === 'awaiting_payment') return [['付款状态', 'WARP 测试账户待付款，未确认扣款'], ['计划提货', order.shipment.pickupDate || '待确认']];
   if (order.status === 'cancelled') return [['运输状态', '运单已取消。']];
   if (order.status === 'delivered') {
     const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(order.deliveredAt);
@@ -1404,7 +1410,8 @@ export function orderDetail(order, activeTab, totalCount, claim, kind, changes) 
       </div>`;
     return managementDetail('定制询价详情', body, order.id, status(order.status, customOrderStatuses));
   }
-  const sections = { overview: orderOverview(order, changes, claim), details: orderInformation(order), files: orderFiles(order) };
+  const sandboxNotice = order.sandbox ? `<section class="notice"><strong>WARP Sandbox 订单 · 仅测试</strong><p>供应商订单 ${e(order.sandboxResult.orderId)} · ${order.sandboxResult.status === 'awaiting_payment' ? '已创建，供应商待付款' : '已创建'}</p><p>报价金额：${money(order.sandboxResult.amountCents)} · 供应商付款状态：${order.sandboxResult.supplierPayment === 'pending' ? '待付款，未确认扣款' : order.sandboxResult.supplierPayment === 'reported' ? '接口返回了测试支付记录' + (order.sandboxResult.payment?.last4 ? '（测试卡尾号 ' + e(order.sandboxResult.payment.last4) + '）' : '') : '接口未返回明确扣款凭证，不能据此确认供应商扣款'}</p>${order.sandboxResult.paymentActionRequired ? '<p>需要在 WARP 测试账户完成付款或配置测试余额 / 测试卡。此订单已存在，请勿重新下单。付款链接未开放，避免进入正式付款页面。</p>' : ''}<p>OMS 独立测试账本：${order.sandboxResult.testDebitCents ? '测试扣款 ' + money(order.sandboxResult.testDebitCents) : '未扣款'} · 余额 ${money(order.sandboxResult.wallet?.balanceCents || 0)}；HYE 客户余额不变。</p></section>` : '';
+  const sections = { overview: sandboxNotice + orderOverview(order, changes, claim), details: orderInformation(order), files: orderFiles(order) };
   const canEdit = canRequestOrderChange(order);
   const edit = canEdit ? `<button class="btn order-edit-action" type="button" data-action="edit-order" data-order="${e(order.id)}" aria-label="修改订单" aria-haspopup="dialog">${orderActionText('修改订单', '修改')}</button>` : '';
   const cancel = canEdit ? `<button class="link order-cancel-action" type="button" data-action="cancel-order" data-order="${e(order.id)}" aria-label="取消订单" aria-haspopup="dialog">${orderActionText('取消订单', '取消')}</button>` : '';

@@ -1,11 +1,13 @@
 # 后续正式接入路径
 
-当前交付只做 Gateway V2 staging 询价，LTL 使用多承运商 `/freights/freight-quote`，单车其他模式使用 `/freights/quote`。不要通过更换 base URL 就开放正式下单。
+当前交付包含 Gateway V2 staging 询价及本机可选 Sandbox 下单，LTL 使用多承运商 `/freights/freight-quote`，单车其他模式使用 `/freights/quote`。不要通过更换 base URL 就开放正式下单。
 
 下一阶段先接入生产账户的只读询价；需要用户明确选择托管后端、提供生产询价密钥并确认使用权限。生产、测试密钥应存储在不同部署的 secret manager 中，轮换独立；不应允许浏览器提交 `apikey`、任意 upstream URL 或环境切换。服务端读取身份和所属 HYE 客户，限制查询配额，记录不含密钥的请求摘要和供应商 quote_id。
 
 HYE customer ledger 与 WARP supplier settlement 必须分账：客户的充值、可用余额、冻结额、退款以 HYE 财务数据为准；WARP 钱包/发票和采购支出只有内部管理员可见。两者不能通过 API 余额字段相互覆盖。客户最终报价由服务端采购价、加价规则及服务费计算，不信任浏览器金额。
 
-如以后明确授权 Sandbox 下单，可在独立测试部署开放：服务端保存规范化询价 payload、账号、quote_id、金额和到期时间；下单时重新读取并校验，不接受浏览器任意 quote_id。V2 单报价 `/freights/quote` 的 ID 对应 `/freights/booking`，市场报价 `/freights/freight-quote` 的 option ID 对应 `/freights/book`；两者不能混用。下单必须带原报价一致的货物、地址及服务信息，先完成正式客户地址/联系人字段映射，再提交测试订单，测试结果不得改写客户真实账本。当前没有实施或调用此路径。
+已按用户授权实现本机 Sandbox 下单：服务端保存规范化 payload、会话、密钥账号摘要、quote_id、金额及到期时间，下单重新校验报价和完整地址/联系人/当地时间窗口。单报价 `/freights/quote` 对应 `/freights/booking`，市场报价 `/freights/freight-quote` 的 option ID 对应 `/freights/book`。SQLite 持久化订单意图、并发锁、结果和独立虚拟测试账本；不进入 HYE 客户财务。Worker 仍只读，不要直接对外公开本机服务。
+
+实际 staging 已创建一单 $96.99 的 LTL 测试订单，供应商返回待付款，未实测成功扣款。API key 不等于付款方式；供应商测试余额/测试卡由 WARP 测试账户管理员配置。没有公开的 V2 充值或已创建订单付款端点，当前不提供 OMS 内自动补付。成功支付/拒付/未知结果通过本地 Postman 合同替身覆盖；不能把虚拟测试账本扣款当成供应商扣款。
 
 正式下单需独立变更和用户明确授权，增加：客户认证、账号与报价归属校验、最终金额确认、单笔及累计采购限额、持久化订单意图和并发锁、供应商返回状态核对、超时后对账、完整审计。不能假设 V1 的 quote_id 幂等语义同样适用于 V2，V2 未经验证的写操作不得自动重试。付款、拒付、退款、取消和发票差额均需可对账状态机。未知结果必须先查供应商订单，不能直接重新下单或直接扣客户余额。

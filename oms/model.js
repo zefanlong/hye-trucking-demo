@@ -61,9 +61,9 @@ export const packingGroups = { I: 'I', II: 'II', III: 'III' };
 export const hazardIdPattern = '(?:[Uu][Nn]|[Nn][Aa]) *[0-9]{4}';
 const hazardIdFormat = new RegExp('^' + hazardIdPattern + '$');
 export const orderStatuses = {
-  ready: '待提货', picked: '已提货', transit: '运输中', delivered: '已签收', cancelled: '已取消'
+  awaiting_payment: '待付款（测试）', ready: '待提货', picked: '已提货', transit: '运输中', delivered: '已签收', cancelled: '已取消'
 };
-export const canClaimOrder = order => ['picked', 'transit', 'delivered'].includes(order?.status);
+export const canClaimOrder = order => !order?.sandbox && ['picked', 'transit', 'delivered'].includes(order?.status);
 export const orderTypes = { ltl: 'LTL', ftl: 'FTL', custom: '定制服务' };
 export const orderType = order => order.shipment.mode === 'custom' ? 'custom' : shipmentMode(order.shipment);
 export const orderRoute = kind => kind === 'ltl' ? '#orders' : '#orders/' + kind;
@@ -511,6 +511,7 @@ function billingDay(at) {
 
 export function billingRecords(orders, today = dateInZone(defaultZone), tickets = currentState().tickets) {
   return orders.flatMap(order => {
+    if (order.sandbox) return [];
     const chargedOn = orderChargeDate(order);
     const bill = {
       id: invoiceId(order), orderId: order.id, issuedOn: chargedOn, chargedOn,
@@ -583,6 +584,7 @@ const demoProNumbers = new Map([
 ]);
 
 function withDemoProNumber(order) {
+  if (order.sandbox) return order.sandboxResult?.status === 'awaiting_payment' ? { ...order, status: 'awaiting_payment' } : order;
   const sample = demoProNumbers.get(order.id);
   return sample && !String(order.proNumber ?? '').trim() ? { ...order, proNumber: sample } : order;
 }
@@ -977,13 +979,27 @@ export function bookOrder(quoteId) {
   return order;
 }
 
+// Supplier Sandbox orders never enter HYE customer billing or wallet flows.
+export function recordSandboxOrder(quoteId, result) {
+  const state = currentState(), quote = state.quotes.find(quote => quote.id === quoteId), rate = quote && selectedRate(quote);
+  if (!rate?.provider?.bookingHandle || result.environment !== 'staging' || result.handle !== rate.provider.bookingHandle || result.amountCents !== rate.total || !result.orderId) throw new Error('测试订单与报价无法匹配。');
+  const existing = state.orders.find(order => order.sandboxResult?.handle === result.handle);
+  if (existing) return existing;
+  const order = { id: 'SBX-' + result.orderId, quoteId, sandbox: true, sandboxResult: result,
+    reference: (result.confirmedDetails || quote.details)?.originReference || '', details: structuredClone(result.confirmedDetails || quote.details), shipment: structuredClone(result.confirmedShipment || quote.shipment), rate: structuredClone(rate),
+    date: dateInZone(), createdAt: Date.now(), status: result.status === 'awaiting_payment' ? 'awaiting_payment' : 'ready', proNumber: result.proNumber || '' };
+  persist({ ...state, orders: [order, ...state.orders] });
+  return order;
+}
+
 export const orderChangeLabels = {
   address: '街道地址', addressType: '地址类型', Company: '公司名称', Unit: '套间 / 单元',
   Contact: '现场联系人', Phone: '联系电话', PhoneExtension: '分机号', Email: '联系邮箱', Reference: '参考单号 / 交接码', Notes: '交接备注'
 };
 export const orderStopLabel = side => side === 'origin' ? '提货' : '送货';
-export const canRequestOrderChange = order => ['ready', 'picked', 'transit'].includes(order?.status);
+export const canRequestOrderChange = order => !order?.sandbox && ['ready', 'picked', 'transit'].includes(order?.status);
 export function editableOrderStops(order) {
+  if (order?.sandbox) return [];
   if (order?.status === 'ready') return sides;
   return canRequestOrderChange(order) ? ['destination'] : [];
 }

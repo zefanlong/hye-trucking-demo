@@ -100,10 +100,24 @@ export async function fetchWarpQuote(shipment) {
   const base = globalThis.HYE_WARP_CONFIG?.gatewayUrl ?? '';
   const response = await fetch(`${base}/api/warp/quote`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shipment }),
-    signal: AbortSignal.timeout(50000), credentials: 'omit', referrerPolicy: 'no-referrer'
+    signal: AbortSignal.timeout(50000), credentials: 'same-origin', referrerPolicy: 'no-referrer'
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.message || '询价服务不可用。GitHub Pages 需配置独立询价后端；本地可运行 npm start。');
   if (data.source !== 'warp-v2' || !Array.isArray(data.options) || !data.options.length || data.options.some(row => !Number.isSafeInteger(row.priceCents) || row.priceCents <= 0 || !(row.expiresAt > Date.now()))) throw new Error('询价服务返回了无效报价。');
+  return data;
+}
+
+
+export async function bookWarpSandbox(quote) {
+  if (globalThis.HYE_WARP_CONFIG?.gatewayUrl) throw new Error('沙盒下单目前仅在本机持久化测试服务开放。');
+  const rate = quote.rates.find(rate => rate.id === quote.selectedRateId);
+  if (!rate?.provider?.bookingHandle) throw new Error('请重新询价以建立服务端沙盒订单快照。');
+  const session = await fetch('/api/warp/sandbox/session', { credentials: 'same-origin', cache: 'no-store' }).then(response => response.json());
+  if (!session.bookingEnabled) throw new Error('沙盒下单尚未启用。');
+  const response = await fetch('/api/warp/sandbox/book', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-HYE-CSRF': session.csrfToken },
+    body: JSON.stringify({ handle: rate.provider.bookingHandle, confirmedAmountCents: rate.total, confirmSandbox: true, shipment: quote.shipment, details: quote.details }), signal: AbortSignal.timeout(55000) });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'WARP 沙盒下单暂不可用。');
   return data;
 }

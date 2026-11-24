@@ -2,12 +2,20 @@
 const http = require('http');
 const server = http.createServer((req, res) => {
   const send = (code, body) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
-  if (req.method !== 'POST' || !['/api/v1/freights/quote', '/api/v1/freights/freight-quote'].includes(req.url)) return send(501, { code: 'NOT_MODELED' });
+  if (req.method !== 'POST' || !['/api/v1/freights/quote', '/api/v1/freights/freight-quote', '/api/v1/freights/book', '/api/v1/freights/booking'].includes(req.url)) return send(501, { code: 'NOT_MODELED' });
   let text = '';
   req.on('data', chunk => { text += chunk; });
   req.on('end', () => {
     let body; try { body = JSON.parse(text); } catch { return send(400, { code: 'INVALID_JSON' }); }
     if (req.headers.apikey !== 'test-server-key' || req.headers.authorization) return send(401, { code: 'request_unauthorized' });
+    if (req.url.endsWith('/book') || req.url.endsWith('/booking')) {
+      const marketBook = req.url.endsWith('/book');
+      const items = marketBook ? body.items : body.listItems;
+      if (!body.quoteId || !items?.length || !body.pickupInfo?.contactPhone || !body.deliveryInfo?.contactPhone || !body.pickupInfo.address.street || !body.pickupInfo[marketBook ? 'timeWindow' : 'windowTime']) return send(400, { code: 'invalid_field_data' });
+      if (body.quoteId === 'MOCK_CARD_FAIL') return send(402, { code: 'CHARGE_FAILED' });
+      if (body.quoteId === 'MOCK_500') return send(500, { code: 'internal_server_error' });
+      return send(200, { orderId: 'TEST_ORDER_' + body.quoteId, proNumber: 'P-SANDBOX', shipmentIds: ['S-SANDBOX'], trackingNumber: 'TEST_TRACK', ...(body.quoteId === 'MOCK_PAYMENT_REQUIRED' ? { paymentLink: 'https://customer.wearewarp.com/dashboard/pay-orders', message: 'Add funds' } : { payment: { method: 'card', amount_charged: 188.65, card_fee: 0, last4: '4242' } }) });
+    }
     const market = req.url.endsWith('/freight-quote');
     const items = market ? body.items : body.listItems;
     if (!body.pickupInfo?.zipcode || !body.deliveryInfo?.zipcode || !body.pickupDate || !items?.length || items.some(i => !i.quantity || !i.totalWeight || !i.length || !i.width || !i.height || i.sizeUnit !== 'IN' || i.weightUnit !== 'lbs')) return send(400, { code: 'required_field_missing' });

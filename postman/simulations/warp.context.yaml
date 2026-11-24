@@ -1,7 +1,7 @@
 {
   "purpose": {
-    "stands_in_for": "WARP Gateway V2 staging /freights/quote and /freights/freight-quote",
-    "unblocks": "HYE OMS request serialization, response projection and failure handling without using real keys"
+    "stands_in_for": "WARP Gateway V2 staging quote, freight-quote, booking and book",
+    "unblocks": "HYE OMS quote serialization, durable Sandbox booking, payment outcomes and recovery without real provider writes"
   },
   "assumptions": [
     {
@@ -38,6 +38,15 @@
       "reason": "Official QuoteOption schema and actual staging response agree for the tested LTL lane.",
       "verification": "2026-11-24: 90001 to 60601, two 400lb pallets, appointment delivery returned HTTP 200 and 17 options from WARP and WWEX. Twelve automated tests cover request mappings, malformed/expired options, duplicates, and rate-specific booking lock. All other lane/account coverage remains unverified.",
       "source": "contracts/warp-v2.openapi.json FreightQuoteBody/QuoteOption; oms/warp-api.js; server/gateway.test.mjs",
+      "updated_at": "2026-11-24"
+    },
+    {
+      "id": "v2-sandbox-booking-and-payment",
+      "status": "partial",
+      "claim": "V2 marketplace and single-quote bookings use different endpoints; paymentLink means a created unpaid order, not successful debit.",
+      "reason": "Official V2 contract matches the actual staging marketplace booking. Saved-card success/decline are only tested against the local contract stand-in.",
+      "verification": "2026-11-24: actual staging /freights/book created order 01M86H8S5FNRPXJ41WAWNDEJK8, PRO P-00447-2647 for $96.99 and returned paymentLink. No actual successful supplier charge, test-card setup or top-up. Automated tests cover both booking shapes, paid response, unpaid hold, declined card, concurrency, reserved budget, unknown outcomes and restart.",
+      "source": "contracts/warp-v2.openapi.json; server/sandbox-booking.test.mjs; https://www.wearewarp.com/freight-api",
       "updated_at": "2026-11-24"
     }
   ],

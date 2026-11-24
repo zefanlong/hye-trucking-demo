@@ -1,6 +1,6 @@
-import { fetchWarpQuote } from './warp-api.js?v=warp-v2-4';
+import { fetchWarpQuote, bookWarpSandbox } from './warp-api.js?v=warp-sandbox-booking-1';
 import {
-  currentState, emptyShipment, exampleShipment, emptyItem, saveWarpQuote, bookOrder, saveProfile,
+  currentState, emptyShipment, exampleShipment, emptyItem, saveWarpQuote, bookOrder, recordSandboxOrder, saveProfile,
   saveAddress, removeAddress, postalCode, addressValue, unitSettings, dateInZone, billingRecords, billHref, money, billStatusText, billAmountLabel, rebillMethodText, collectRebillEarly, walletSnapshot, rechargeWallet, walletRechargeAmount, walletKinds,
   displayMeasurement, updateQuote, chooseRate, quoteStatus, pricingReady, detailsReady, hasStreetAddress,
   addressTypes, shortAddress, stopDetailsReady, cargoReady, emptyCommodity, itemCommodities, hazardDeclarationsReady, stopHoursReady,
@@ -8,14 +8,14 @@ import {
   createTicket, updateTicket, caseTypes, caseKind, caseRoute, caseHref, caseCategory, latestCase, validateCase,
   canClaimOrder, canRequestOrderChange, editableOrderStops, planOrderChange, planOrderCargoChange, planOrderCancellation, submitOrderChange,
   emptyCustomStop, customShipmentStops, customCargoRoute, customCargoIdentities, exampleCustomShipment, customRequestStatus, customChangeTicket, submitCustomRequestChange, simulateCustomResponse, bookCustomRequest
-} from './model.js?v=warp-v2-4';
+} from './model.js?v=warp-sandbox-booking-1';
 import {
   quoteView, ratesView, ordersView, billingView, accountView, accountTabs, walletContent, walletRows, walletRechargeForm, walletRechargeConfirmation, dashboardView, campaignDetails, orderRows, billRows, billDetail,
   addressRows, addressForm, icon, e, detailsView, quoteSummary, confirmationView, carrierQuotes, workflowHeader,
   cargoEditor, cargoTotalsText, cargoItemMetrics, serviceSelectionText, compareRates, orderDetail, customQuoteView, customRecordsView, customInquiryNavigation, customRequestSnapshot, customChangeComparison,
   apiKeyForm, apiKeyResult, ticketRows, ticketDetail, ticketsView, ticketForm, caseForm, caseChargeOptions, paginationControls, pageSizes, quoteAssistantForm, quoteAssistantResult,
   orderChangeEditor, orderChangeReview, orderCancellationForm, customRouteSummary, customStopLabel, customStopCargo
-} from './views.js?v=warp-v2-4';
+} from './views.js?v=warp-sandbox-booking-1';
 import { customRequestChanges } from './custom-changes.js?v=account-layout';
 import { renderRouteMap } from './route-map.js?v=zip-suggestions';
 import { orderDocument } from './order-documents.js?v=account-layout';
@@ -42,8 +42,8 @@ const labels = { dashboard: '工作台', quote: '快速查价', rates: '报价�
 const filters = Object.fromEntries([...Object.keys(orderTypes), ...Object.keys(caseTypes), 'bills', 'rebills', 'customRecords', 'wallet'].map(kind => [kind, { query: '', status: '', page: 1, size: 20 }]));
 const rateFiltersByQuote = new Map();
 const stopSides = ['origin', 'destination'];
-const stopFields = ['Company', 'Unit', 'Contact', 'Email', 'Phone', 'PhoneExtension', 'Reference', 'Notes', 'OpensAt', 'ClosesAt'];
-const detailFields = [...stopSides.flatMap(side => stopFields.map(field => side + field)), 'pickupEnd'];
+const stopFields = ['Company', 'Unit', 'Contact', 'Email', 'Phone', 'PhoneExtension', 'Reference', 'Notes', 'OpensAt', 'ClosesAt', 'Timezone'];
+const detailFields = [...stopSides.flatMap(side => stopFields.map(field => side + field)), 'pickupEnd', 'destinationDate'];
 
 let draft = emptyShipment();
 let draftId = '';
@@ -828,7 +828,7 @@ function saveDetails(form = workspace.querySelector('#details-form'), editItems)
     pickupDate: fields.get('pickupDate'), pickupTime: fields.get('pickupTime')
   };
   delete shipment.timezone;
-  const details = Object.fromEntries(detailFields.map(name => [name, fields.get(name).trim()]));
+  const details = Object.fromEntries(detailFields.map(name => [name, String(fields.get(name) ?? '').trim()]));
   return updateQuote(quote.id, { shipment, details, stage: 'details' });
 }
 
@@ -1091,11 +1091,12 @@ const actions = {
       destinationCompany: 'Midwest Demo Receiving', destinationContact: '演示送货联系人', destinationEmail: 'delivery@example.com', destinationPhone: '+1 312 555 0102',
       originReference: 'PU-DEMO-001', originNotes: '从西侧入口进入，抵达后联系仓库。', originOpensAt: '09:00', originClosesAt: '17:00',
       destinationReference: 'DEL-DEMO-001', destinationNotes: '请到收货窗口登记。', destinationOpensAt: '09:00', destinationClosesAt: '17:00',
+      originTimezone: 'America/Los_Angeles', destinationTimezone: 'America/Chicago', destinationDate: dateInZone('America/Chicago', 10),
       pickupEnd: '17:00', commodity: '纸箱包装日用品'
     };
     for (const [name, value] of Object.entries(values)) {
       const field = form.querySelector('[name="' + name + '"]');
-      if (!field.value) setPhoneInputValue(field, value);
+      if (field && !field.value) setPhoneInputValue(field, value);
     }
     const quote = saveDetails(form);
     if (quote) updateSummary(quote);
@@ -1140,18 +1141,19 @@ const actions = {
     const quote = findQuote(id);
     if (quote) showConfirmation(quote);
   },
-  'confirm-booking'({ quote: id }) {
-    const order = bookOrder(id);
-    if (!order) {
-      const quote = findQuote(id);
-      if (quote) showConfirmation(quote, '请确认报价有效并补齐订单资料。');
-      return;
-    }
-    dialog.close();
-    draft = emptyShipment();
-    units = currentState().profile.units;
-    notify(`演示下单成功，已模拟扣款 ${money(order.rate.total)}`);
-    navigate('orders/' + order.id);
+  async 'confirm-booking'({ quote: id }, button) {
+    if (button.disabled) return;
+    const quote = findQuote(id);
+    const rate = quote?.rates.find(rate => rate.id === quote.selectedRateId);
+    button.disabled = true;
+    try {
+      const order = rate?.provider ? recordSandboxOrder(id, await bookWarpSandbox(quote)) : bookOrder(id);
+      if (!order) { if (quote) showConfirmation(quote, '请确认报价有效并补齐订单资料。'); return; }
+      dialog.close(); draft = emptyShipment(); units = currentState().profile.units;
+      notify(order.sandbox ? (order.sandboxResult.status === 'awaiting_payment' ? 'WARP 沙盒订单已创建，供应商待付款；未记测试扣款。' : 'WARP 沙盒订单已创建，独立测试账本已记账。') : `演示下单成功，已模拟扣款 ${money(order.rate.total)}`);
+      navigate('orders/' + order.id);
+    } catch (error) { showConfirmation(quote, error.message); }
+    finally { if (button.isConnected) button.disabled = false; }
   },
   'choose-address'({ side }) {
     const stopSide = document.getElementById(side)?.closest('[data-custom-stop]')?.dataset.side ?? side;
@@ -1380,6 +1382,7 @@ const actions = {
   },
   'order-file'({ order: id, kind, mode, bill }) {
     const order = currentState().orders.find(order => order.id === id);
+    if (order?.sandbox) { notify('沙盒供应商单证尚未接入。'); return; }
     const file = orderDocument(order, kind, bill);
     if (!file) return;
     const url = URL.createObjectURL(new Blob([file.html], { type: 'text/html;charset=utf-8' }));
