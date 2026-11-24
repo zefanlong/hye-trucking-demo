@@ -6,7 +6,7 @@ import {
   quoteModes, shipmentMode, quoteEntry, equipmentTypes, equipmentSummary, addressContactFields, ticketStatuses, ticketCategories, billHref,
   caseTypes, caseKind, caseRoute, caseHref, caseCategory, disputeReasons, claimReasons,
   canClaimOrder, canRequestOrderChange, editableOrderStops, orderStopValues, orderChangeLabels, orderStopLabel, customShipmentStops, customCargoRoute, customRequestStatuses, customRequestStatus, customChangeTicket
-} from './model.js?v=account-layout';
+} from './model.js?v=warp-v2-1';
 import { customRequestChanges } from './custom-changes.js?v=account-layout';
 import { callingCodes, parsePhone } from './phone-input.js?v=phone-input-2';
 
@@ -269,7 +269,9 @@ export function quoteView(shipment, units, hasAssistantDetails = false) {
       </section>
       <div>
         <p class="error" role="alert" id="quote-error"></p>
-        <div class="actions end"><p class="note">${hasAssistantDetails ? '交接资料将在查看报价时保存，选定报价后自动带入订单。' : quoteModes[mode] + ' · 美国境内运输演示'}</p><button class="btn primary shipment-submit" type="submit">查看报价 ${icon('arrow')}</button></div>
+        <label class="field"><span>报价来源</span><select name="quoteSource" class="select-input"><option value="warp">WARP Gateway V2 · Sandbox 参考价</option><option value="demo">原演示报价 · 模拟数据</option></select></label>
+        <p class="note">WARP Gateway V2 测试环境询价；报价仅供验证，不代表正式账户协议价。当前支持托盘与单车运输。密钥由后端保管。</p>
+        <div class="actions end"><p class="note">${hasAssistantDetails ? '交接资料将在查看报价时保存，选定报价后自动带入订单。' : quoteModes[mode] + ' · 美国境内运输演示'}</p><button class="btn primary shipment-submit" type="submit">获取报价 ${icon('arrow')}</button></div>
       </div>
     </form>`;
 }
@@ -582,7 +584,7 @@ function detailList(fields, className = '') {
   ).join('')}</dl>`;
 }
 function feeRows(rate) {
-  return [['运输费用', money(rate.freight)], ['附加服务', money(rate.accessorial)]];
+  return rate.provider ? (rate.provider.chargesReconcile ? rate.provider.charges.filter(row => row.code !== 'TOTAL').map(row => [e(row.description || row.code), money(row.cents)]) : [['WARP API 总价', money(rate.total)]]) : [['运输费用', money(rate.freight)], ['附加服务', money(rate.accessorial)]];
 }
 function feeBreakdown(rate, estimate = false) {
   return detailList([...feeRows(rate), [estimate ? '预计合计 (USD)' : '合计 (USD)', money(rate.total), 'detail-total']], 'fees');
@@ -593,6 +595,7 @@ const validUntil = rate => rate.expiresAt
 
 const arrivalDateFormat = new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', timeZone: 'UTC' });
 function arrivalText(quote, rate) {
+  if (rate.provider) return rate.deliveryDate || '待确认';
   const date = quote.shipment.pickupDate;
   if (!date || !rate.businessDays?.length) return '待确认提货日期';
   return [...new Set(rate.businessDays)].map(days => {
@@ -643,11 +646,11 @@ export function carrierQuotes(quote, booked = null, rates = quote.rates) {
         </dl>
         <div class="rate-amount"><strong>${money(rate.total)}</strong><span class="note">USD</span>${action}</div>
       </div>
-      <div class="rate-costs"><span>运输费 <strong>${money(rate.freight)}</strong></span><span>附加费 <strong>${money(rate.accessorial)}</strong></span></div>
+      ${rate.provider ? `<div class="rate-costs"><span>API 返回总价 <strong>${money(rate.total)}</strong> · USD</span></div><div class="panel-inset"><p class="note">V2 Sandbox 参考报价 · ${e(new Date(rate.provider.fetchedAt).toLocaleString('zh-CN'))} 获取</p>${rate.provider.substituted ? '<p class="notice">WARP 将共享 LTL 替换为专车，价格不可直接与 LTL 比较。</p>' : ''}${rate.provider.charges?.length ? `<dl class="detail-list">${rate.provider.charges.map(row => `<div><dt>${e(row.description || row.code)}</dt><dd>${money(row.cents)}</dd></div>`).join('')}</dl><p class="note">${rate.provider.chargesReconcile ? '费用分项合计与总价一致' : '分项口径未能核对，请以 API 总价为准'}</p>` : ''}${rate.provider.missing.length ? `<p class="note">待补信息：${e(rate.provider.missing.join('、'))}</p>` : ''}</div>` : `<div class="rate-costs"><span>运输费 <strong>${money(rate.freight)}</strong></span><span>附加费 <strong>${money(rate.accessorial)}</strong></span></div>`}
     </article>`;
   }).join('');
   const empty = quote.rates.length ? '没有符合筛选条件的报价' : '暂无可选报价';
-  return `<div class="carrier-quotes" role="region" aria-label="承运商模拟报价">${cards || `<p class="panel empty">${empty}</p>`}</div>`;
+  return `<div class="carrier-quotes" role="region" aria-label="承运商报价">${cards || `<p class="panel empty">${empty}</p>`}</div>`;
 }
 
 function includedServiceNames(shipment, side) {
@@ -728,13 +731,14 @@ export function ratesView(quote, booked, message, units, filters) {
     <div class="rates-layout">
       ${shipmentOverview(quote, units, booked)}
       <section class="rate-comparison" aria-labelledby="rate-comparison-heading">
-        <div class="panel rate-toolbar"><div class="rate-toolbar-heading"><h2 class="panel-title" id="rate-comparison-heading">承运商报价</h2><p class="note" id="rate-result-count" role="status">${rates.length} 条报价</p></div>${rateFilters(quote, filters)}</div>
+        <div class="panel rate-toolbar"><div class="rate-toolbar-heading"><h2 class="panel-title" id="rate-comparison-heading">${quote.source === 'warp-v2' ? 'WARP Gateway V2 · Sandbox 报价' : '演示报价（模拟数据）'}</h2><p class="note" id="rate-result-count" role="status">${rates.length} 条报价</p></div>${rateFilters(quote, filters)}</div>
         <div class="rate-list-scroll" tabindex="0" role="region" aria-label="报价列表">
+      ${quote.source === 'warp-v2' ? '<p class="notice">来自 WARP Gateway V2 测试环境 · 实际 API 返回的参考价，非生产报价或 HYE 最终售价。仅供查价，下单未开放。</p>' : '<p class="notice">以下为演示模拟价格。</p>'}
           ${booked ? '<p class="notice">这条报价已生成运单。</p>' : ''}
           ${!booked && pending ? '<p class="notice">当前报价需要更新，更新后即可选用。</p>' : ''}
           ${message ? '<p class="notice">' + e(message) + '</p>' : ''}
           <div id="rate-results">${carrierQuotes(quote, booked, rates)}</div>
-          <p class="note">报价与时效为模拟数据 · 有效期按当前浏览器时间显示</p>
+          <p class="note">${quote.source === 'warp-v2' ? '报价与时效来自 V2 Sandbox API · 非生产报价' : '报价与时效为模拟数据'} · 有效期按当前浏览器时间显示</p>
         </div>
       </section>
     </div>`;
@@ -791,7 +795,7 @@ export function quoteSummary(quote, message = '', review = false) {
       ${message ? '<p class="note" role="status">' + e(message) + '</p>' : ''}
       ${rateActions(quote, review)}
     </div>
-    ${review
+    ${quote.source === 'warp-v2' ? '<p class="notice">WARP 供应商参考价，仅供查价；下单与扣款未开放。</p><button class="btn primary" type="button" disabled>真实下单未开放</button>' : review
       ? `<p class="note">确认下单时按所选报价扣款。本页面仅模拟扣款。</p><button class="btn primary" type="button" data-action="confirm-booking" data-quote="${e(quote.id)}"${state === 'valid' ? '' : ' disabled'}>确认下单并扣款</button>`
       : quickRates(quote, state) + '<button class="btn primary" type="submit" form="details-form">核对订单</button>'}`;
 }
@@ -1746,7 +1750,7 @@ export function walletRows(entries) {
 }
 export function walletContent(snapshot, result, filter) {
   return `<div class="wallet-content">
-    <section class="wallet-overview" aria-labelledby="wallet-balance-title"><div class="wallet-balance"><h2 id="wallet-balance-title">可用余额 <small>USD</small></h2><p>${money(snapshot.balance)}</p><span class="note">演示资金账户</span></div>
+    <section class="wallet-overview" aria-labelledby="wallet-balance-title"><div class="wallet-balance"><h2 id="wallet-balance-title">可用余额 <small>USD</small></h2><p>${money(snapshot.balance)}</p><span class="note">HYE 客户演示资金账户 · 与 WARP 供应商余额独立</span></div>
     <dl class="wallet-metrics"><div><dt>累计入账</dt><dd>${money(snapshot.credits)}</dd><small>含演示初始入账</small></div><div><dt>累计支出</dt><dd>${money(snapshot.debits)}</dd><small>运费与已扣补收费用</small></div><div><dt>待处理补收</dt><dd><a class="link" href="#billing/rebills">${money(snapshot.pendingAmount)}</a></dd><small>${snapshot.pendingCount} 笔 · 尚未计入支出${snapshot.disputedAmount ? '，含申诉中 ' + money(snapshot.disputedAmount) : ''}</small></div></dl>
       <div class="wallet-overview-action"><button type="button" class="btn primary small" data-action="wallet-recharge">${icon('plus')}模拟充值</button><p class="note">仅用于演示，不产生真实交易</p></div>
     </section>

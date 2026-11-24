@@ -1,0 +1,6 @@
+{
+  "name": "hye-warp-quotes",
+  "main": "server/gateway.mjs",
+  "compatibility_date": "2026-11-24",
+  "ratelimits": [{ "name": "QUOTE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }]
+}

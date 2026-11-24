@@ -342,12 +342,14 @@ function pricingSnapshot(shipment) {
     return { type, quantity, weight, length, width, height, ...(classes.length ? { classes } : {}) };
   });
   const equipment = isFtl ? { type: shipment.equipment, count: shipment.vehicleCount } : undefined;
-  return { origin: stop('origin'), destination: stop('destination'), items, equipment };
+  return { origin: stop('origin'), destination: stop('destination'), items, equipment, pickupDate: shipment.pickupDate, cargoDeclarations: shipment.items.map(item => item.commodities ?? []) };
 }
 
 function pricingChanges(previous, current) {
   if (!previous) return ['运输计价信息'];
   const changes = [];
+  if (previous.pickupDate !== current.pickupDate) changes.push('提货日期');
+  if (JSON.stringify(previous.cargoDeclarations) !== JSON.stringify(current.cargoDeclarations)) changes.push('货物申报信息');
   for (const side of sides) {
     const label = side === 'origin' ? '提货' : '送货';
     if (previous[side].zip !== current[side].zip) changes.push(label + '邮编');
@@ -908,6 +910,25 @@ export function saveQuote(shipment, previousId, supplemental = {}) {
   return storeQuote(state, priceQuote({ ...previous, id: previous?.id ?? idFor('QT-'), stage: 'compare', details }, shipment));
 }
 
+// Provider quotes remain separate from all demo pricing and demo ledger writes.
+export function saveWarpQuote(shipment, provider, previousId, supplemental = {}) {
+  const state = currentState();
+  const previous = state.quotes.find(entry => entry.id === previousId && entry.source === 'warp-v2');
+  const id = previous?.id ?? idFor('QT-');
+  const rate = {
+    id: 'warp-' + provider.quoteId, carrierId: 'warp', carrierName: 'WARP',
+    name: provider.substituted ? 'WARP 专车替代方案（非共享 LTL）' : 'WARP ' + provider.vehicle,
+    total: provider.priceCents, freight: provider.priceCents, accessorial: 0,
+    expiresAt: provider.expiresAt, reference: provider.quoteId, provider,
+    days: provider.transitDays == null ? '待确认' : provider.transitDays + ' 天（API 返回）',
+    businessDays: [], deliveryDate: provider.deliveryDate
+  };
+  return storeQuote(state, { id, stage: 'compare', source: 'warp-v2', provider,
+    shipment: structuredClone(shipment), pricedFor: pricingSnapshot(shipment), rates: [rate],
+    date: dateInZone(), details: { ...previous?.details, ...supplemental }, selectedRateId: '', acceptedRate: null,
+    changeReason: previous ? 'WARP 已重新询价，请重新选用报价。' : '' });
+}
+
 export function updateQuote(id, update) {
   const state = currentState();
   const quote = state.quotes.find(entry => entry.id === id);
@@ -918,7 +939,7 @@ export function updateQuote(id, update) {
 export function refreshQuote(id) {
   const state = currentState();
   const quote = state.quotes.find(entry => entry.id === id);
-  if (!quote || !pricingReady(quote.shipment) || state.orders.some(order => order.quoteId === id)) return null;
+  if (!quote || quote.source === 'warp-v2' || !pricingReady(quote.shipment) || state.orders.some(order => order.quoteId === id)) return null;
   return storeQuote(state, priceQuote(quote, quote.shipment));
 }
 
@@ -937,7 +958,7 @@ export function bookOrder(quoteId) {
   if (existing) return existing;
 
   const quote = state.quotes.find(entry => entry.id === quoteId);
-  if (!quote || quoteStatus(quote) !== 'valid' || !detailsReady(quote)) return null;
+  if (!quote || quote.source === 'warp-v2' || quoteStatus(quote) !== 'valid' || !detailsReady(quote)) return null;
   const rate = selectedRate(quote);
   const shipment = { ...quote.shipment, items: quote.shipment.items.map(item => item.commodities ? {
     ...item, commodities: item.commodities.map(({ hazmat, ...commodity }) => commodity.regulated.includes('hazmat') ? { ...commodity, hazmat } : commodity)

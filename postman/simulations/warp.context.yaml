@@ -1,0 +1,34 @@
+{
+  "purpose": {
+    "stands_in_for": "WARP Gateway API V2 staging /freights/quote only",
+    "unblocks": "HYE OMS request serialization, response projection and failure handling without using real keys"
+  },
+  "assumptions": [
+    {
+      "id": "v2-quote-contract",
+      "status": "supported",
+      "claim": "Gateway V2 uses apikey header, grouped totalWeight, and price.amount/expiration_time_utc response fields.",
+      "reason": "Official schema and actual staging response agree for the LTL and FTL requests exercised.",
+      "verification": "2026-11-24: official staging returned HTTP 200 for LTL and FTL; browser rendered LTL response. npm test: 9 checks passed against local Postman simulation. Other lanes/modes/services remain unverified.",
+      "source": "contracts/warp-v2.openapi.json; server/gateway.test.mjs; https://developer.wearewarp.com/docs/freight/",
+      "updated_at": "2026-11-24"
+    },
+    {
+      "id": "sandbox-equals-production",
+      "status": "unknown",
+      "claim": "Sandbox prices equal production account prices.",
+      "reason": "Staging has been exercised; production keys and account rates were not accessed.",
+      "verification": "No production quote or booking request was made. Do not represent these rates as production contract prices.",
+      "source": "https://www.wearewarp.com/freight-api",
+      "updated_at": "2026-11-24"
+    }
+  ],
+  "fingerprints": [
+    {
+      "id": "initial-implementation",
+      "date": "2026-11-24",
+      "commit": "c954066ade55c980074f4d5d969efc09fb1d3706 (working tree modified)",
+      "cli": "Postman 1.83.0"
+    }
+  ]
+}
