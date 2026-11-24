@@ -21,6 +21,15 @@
       "verification": "No production quote or booking request was made. Do not represent these rates as production contract prices.",
       "source": "https://www.wearewarp.com/freight-api",
       "updated_at": "2026-11-24"
+    },
+    {
+      "id": "legacy-oms-ltl-mode",
+      "status": "supported",
+      "claim": "The actual OMS LTL draft omits mode and must be treated as LTL by the V2 adapter.",
+      "reason": "The original emptyShipment/exampleShipment implementation only adds mode for FTL. Explicit unknown modes must still be rejected.",
+      "verification": "2026-11-24: added regression using actual exampleShipment LTL/FTL; 10 automated checks pass, including legacy LTL through the HTTP simulation.",
+      "source": "oms/model.js emptyShipment; oms/warp-api.js; server/gateway.test.mjs",
+      "updated_at": "2026-11-24"
     }
   ],
   "fingerprints": [

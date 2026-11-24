@@ -76,3 +76,26 @@ test('provider quote cannot mutate demo wallet and date edits require new quotes
   const changed = model.updateQuote(quote.id, { shipment: { ...shipment(), pickupDate: '2099-11-26' } });
   assert.equal(model.quoteStatus(changed), 'stale');
 });
+
+
+test('actual OMS LTL example without mode reaches V2; FTL stays explicit and unknown modes fail', async () => {
+  const { exampleShipment } = await import('../oms/model.js');
+  const ltl = exampleShipment('ltl');
+  assert.equal(ltl.mode, undefined);
+  const normalized = toWarpRequest(ltl);
+  assert.equal(normalized.body.shipmentType, 'LTL');
+  assert.equal(normalized.body.listItems[0].totalWeight, 800);
+  let called = false;
+  const response = await handleRequest(request('/api/warp/quote', { shipment: ltl }), { WARP_V2_SANDBOX_KEY: 'test-server-key' }, (url, options) => {
+    called = true;
+    assert.equal(JSON.parse(options.body).shipmentType, 'LTL');
+    return fetch(mockOrigin + '/warp/api/v1/freights/quote', options);
+  });
+  assert.equal(called, true);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).source, 'warp-v2');
+  const ftl = toWarpRequest(exampleShipment('ftl'));
+  assert.equal(ftl.body.shipmentType, 'FTL');
+  assert.equal(ftl.body.vehicleType.code, 'DRY_VAN_53');
+  assert.throws(() => toWarpRequest({ ...ltl, mode: 'custom' }));
+});

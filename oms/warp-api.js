@@ -5,10 +5,12 @@ export function toWarpRequest(shipment, today = new Date().toLocaleDateString('e
   const origin_zip = zip(shipment?.origin), destination_zip = zip(shipment?.destination);
   if (!origin_zip || !destination_zip) fail('请填写两端五位美国 ZIP。');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(shipment.pickupDate ?? '') || !Number.isFinite(Date.parse(shipment.pickupDate)) || new Date(shipment.pickupDate).toISOString().slice(0, 10) !== shipment.pickupDate || shipment.pickupDate < today) fail('请选择有效的提货日期。');
-  if (!['ltl', 'ftl'].includes(shipment.mode)) fail('此入口仅支持 LTL 或 FTL 询价。');
-  const mode = shipment.mode === 'ftl' ? { van: 'DRY_VAN_53', box: 'STRAIGHT_TRUCK_26', sprinter: 'CARGO_VAN' }[shipment.equipment] : 'LTL';
+  // Existing OMS LTL drafts omit mode; keep that legacy representation valid.
+  const transportMode = shipment.mode === undefined ? 'ltl' : shipment.mode;
+  if (!['ltl', 'ftl'].includes(transportMode)) fail('此入口仅支持 LTL 或 FTL 询价。');
+  const mode = transportMode === 'ftl' ? { van: 'DRY_VAN_53', box: 'STRAIGHT_TRUCK_26', sprinter: 'CARGO_VAN' }[shipment.equipment] : 'LTL';
   if (!mode) fail('WARP 当前接入支持干柜、Box Truck 和 Sprinter；其他车型请用演示询价。');
-  if (shipment.mode === 'ftl' && Number(shipment.vehicleCount) !== 1) fail('WARP 单次询价对应一辆车，请将车辆数量设为 1。');
+  if (transportMode === 'ftl' && Number(shipment.vehicleCount) !== 1) fail('WARP 单次询价对应一辆车，请将车辆数量设为 1。');
   if (!Array.isArray(shipment.items) || !shipment.items.length || shipment.items.length > 50) fail('请填写货物重量、尺寸和数量。');
   const items = shipment.items.map(item => {
     if (item.type !== 'pallet') fail('当前 WARP 接入按托盘询价，木箱或纸箱请先按实际托盘信息填写。');

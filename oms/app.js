@@ -1,4 +1,4 @@
-import { fetchWarpQuote } from './warp-api.js?v=warp-v2-1';
+import { fetchWarpQuote } from './warp-api.js?v=warp-v2-2';
 import {
   currentState, emptyShipment, exampleShipment, emptyItem, saveQuote, saveWarpQuote, bookOrder, saveProfile,
   saveAddress, removeAddress, postalCode, addressValue, unitSettings, dateInZone, billingRecords, billHref, money, billStatusText, billAmountLabel, rebillMethodText, collectRebillEarly, walletSnapshot, rechargeWallet, walletRechargeAmount, walletKinds,
