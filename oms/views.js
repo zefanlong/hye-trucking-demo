@@ -6,7 +6,7 @@ import {
   quoteModes, shipmentMode, quoteEntry, equipmentTypes, equipmentSummary, addressContactFields, ticketStatuses, ticketCategories, billHref,
   caseTypes, caseKind, caseRoute, caseHref, caseCategory, disputeReasons, claimReasons,
   canClaimOrder, canRequestOrderChange, editableOrderStops, orderStopValues, orderChangeLabels, orderStopLabel, customShipmentStops, customCargoRoute, customRequestStatuses, customRequestStatus, customChangeTicket
-} from './model.js?v=warp-v2-1';
+} from './model.js?v=warp-v2-4';
 import { customRequestChanges } from './custom-changes.js?v=account-layout';
 import { callingCodes, parsePhone } from './phone-input.js?v=phone-input-2';
 
@@ -269,9 +269,7 @@ export function quoteView(shipment, units, hasAssistantDetails = false) {
       </section>
       <div>
         <p class="error" role="alert" id="quote-error"></p>
-        <label class="field"><span>报价来源</span><select name="quoteSource" class="select-input"><option value="warp">WARP Gateway V2 · Sandbox 参考价</option><option value="demo">原演示报价 · 模拟数据</option></select></label>
-        <p class="note">WARP Gateway V2 测试环境询价；报价仅供验证，不代表正式账户协议价。当前支持托盘与单车运输。密钥由后端保管。</p>
-        <div class="actions end"><p class="note">${hasAssistantDetails ? '交接资料将在查看报价时保存，选定报价后自动带入订单。' : quoteModes[mode] + ' · 美国境内运输演示'}</p><button class="btn primary shipment-submit" type="submit">获取报价 ${icon('arrow')}</button></div>
+        <div class="actions end"><p class="note">${hasAssistantDetails ? '交接资料将在查看报价时保存，选定报价后自动带入订单。' : quoteModes[mode] + ' · 美国境内运输演示'}</p><button class="btn primary shipment-submit" type="submit">查看报价 ${icon('arrow')}</button></div>
       </div>
     </form>`;
 }
@@ -614,15 +612,16 @@ function carrierName(rate) {
 
 function carrierIdentity(rate, subtitle = rate.reference ?? '历史报价') {
   const carrier = carrierProfiles[rate.carrierId];
-  return `<span class="carrier-identity">${carrier?.logo ? '<img src="../assets/carriers/' + carrier.logo + '" alt="">' : ''}<span><strong>${e(carrierName(rate))}</strong>${subtitle ? `<small>${e(subtitle)}</small>` : ''}</span></span>`;
+  const logo = rate.logo || carrier?.logo;
+  return `<span class="carrier-identity">${logo ? '<img src="../assets/carriers/' + logo + '" alt=""' + (logo === 'WARP.svg' ? ' class="carrier-logo-dark"' : '') + '>' : ''}<span><strong>${e(carrierName(rate))}</strong>${subtitle ? `<small>${e(subtitle)}</small>` : ''}</span></span>`;
 }
 
 export function compareRates(rates, { carrier = '', service = '', sort = 'price-asc' } = {}) {
   return rates.filter(rate => (!carrier || rate.carrierId === carrier) && (!service || rate.name === service)).sort((first, second) => {
     const priceDifference = first.total - second.total;
     if (!sort.startsWith('time')) return sort === 'price-desc' ? -priceDifference : priceDifference;
-    const a = first.businessDays;
-    const b = second.businessDays;
+    const a = first.provider ? (first.provider.transitDays == null ? [] : [first.provider.transitDays]) : first.businessDays;
+    const b = second.provider ? (second.provider.transitDays == null ? [] : [second.provider.transitDays]) : second.businessDays;
     if (!a?.length || !b?.length) return Number(!a?.length) - Number(!b?.length) || priceDifference;
     const difference = a.at(-1) - b.at(-1) || a[0] - b[0];
     return (sort === 'time-desc' ? -difference : difference) || priceDifference;
@@ -637,7 +636,7 @@ export function carrierQuotes(quote, booked = null, rates = quote.rates) {
       : `<button class="btn primary small" type="button" data-action="select-rate" data-quote="${e(quote.id)}" data-rate="${e(rate.id)}" aria-label="选用 ${e(carrierName(rate))} ${e(rate.name)}报价"${blocked || !(rate.expiresAt > Date.now()) ? ' disabled' : ''}>选用报价</button>`;
     return `<article class="panel carrier-rate${rate.id === quote.selectedRateId ? ' selected' : ''}" aria-label="${e(carrierName(rate))} 报价">
       <div class="carrier-rate-main">
-        ${carrierIdentity(rate)}
+        ${carrierIdentity(rate, rate.provider ? 'Sandbox API · ' + (rate.provider.sourceName || 'WARP') : '演示模拟报价')}
         <dl class="rate-meta">
           <div><dt>运输方案</dt><dd>${e(rate.name)}</dd></div>
           <div><dt>预计时效</dt><dd>${e(rate.days)}</dd></div>
@@ -646,7 +645,7 @@ export function carrierQuotes(quote, booked = null, rates = quote.rates) {
         </dl>
         <div class="rate-amount"><strong>${money(rate.total)}</strong><span class="note">USD</span>${action}</div>
       </div>
-      ${rate.provider ? `<div class="rate-costs"><span>API 返回总价 <strong>${money(rate.total)}</strong> · USD</span></div><div class="panel-inset"><p class="note">V2 Sandbox 参考报价 · ${e(new Date(rate.provider.fetchedAt).toLocaleString('zh-CN'))} 获取</p>${rate.provider.substituted ? '<p class="notice">WARP 将共享 LTL 替换为专车，价格不可直接与 LTL 比较。</p>' : ''}${rate.provider.charges?.length ? `<dl class="detail-list">${rate.provider.charges.map(row => `<div><dt>${e(row.description || row.code)}</dt><dd>${money(row.cents)}</dd></div>`).join('')}</dl><p class="note">${rate.provider.chargesReconcile ? '费用分项合计与总价一致' : '分项口径未能核对，请以 API 总价为准'}</p>` : ''}${rate.provider.missing.length ? `<p class="note">待补信息：${e(rate.provider.missing.join('、'))}</p>` : ''}</div>` : `<div class="rate-costs"><span>运输费 <strong>${money(rate.freight)}</strong></span><span>附加费 <strong>${money(rate.accessorial)}</strong></span></div>`}
+      ${rate.provider ? `<div class="rate-costs"><span>API 总价 <strong>${money(rate.total)}</strong></span><details><summary>费用明细</summary><div class="panel-inset"><p class="note">报价编号 ${e(rate.reference)} · ${e(new Date(rate.provider.fetchedAt).toLocaleString('zh-CN'))} 获取</p>${rate.provider.substituted ? '<p class="notice">共享 LTL 已替换为专车，请核对运输方案。</p>' : ''}${rate.provider.charges?.length ? `<dl class="detail-list">${rate.provider.charges.map(row => `<div><dt>${e(row.description || row.code)}</dt><dd>${money(row.cents)}</dd></div>`).join('')}</dl><p class="note">${rate.provider.chargesReconcile ? '费用分项合计与总价一致' : '分项口径未能核对，请以 API 总价为准'}</p>` : ''}<p class="note">Sandbox 参考价，非生产报价或 HYE 最终售价；下单未开放。</p></div></details></div>` : `<div class="rate-costs"><span>运输费 <strong>${money(rate.freight)}</strong></span><span>附加费 <strong>${money(rate.accessorial)}</strong></span></div>`}
     </article>`;
   }).join('');
   const empty = quote.rates.length ? '没有符合筛选条件的报价' : '暂无可选报价';
@@ -731,14 +730,14 @@ export function ratesView(quote, booked, message, units, filters) {
     <div class="rates-layout">
       ${shipmentOverview(quote, units, booked)}
       <section class="rate-comparison" aria-labelledby="rate-comparison-heading">
-        <div class="panel rate-toolbar"><div class="rate-toolbar-heading"><h2 class="panel-title" id="rate-comparison-heading">${quote.source === 'warp-v2' ? 'WARP Gateway V2 · Sandbox 报价' : '演示报价（模拟数据）'}</h2><p class="note" id="rate-result-count" role="status">${rates.length} 条报价</p></div>${rateFilters(quote, filters)}</div>
+        <div class="panel rate-toolbar"><div class="rate-toolbar-heading"><h2 class="panel-title" id="rate-comparison-heading">承运商报价</h2><p class="note" id="rate-result-count" role="status">${rates.length} 条报价</p></div>${rateFilters(quote, filters)}</div>
         <div class="rate-list-scroll" tabindex="0" role="region" aria-label="报价列表">
-      ${quote.source === 'warp-v2' ? '<p class="notice">来自 WARP Gateway V2 测试环境 · 实际 API 返回的参考价，非生产报价或 HYE 最终售价。仅供查价，下单未开放。</p>' : '<p class="notice">以下为演示模拟价格。</p>'}
+          ${quote.providerError ? '<p class="notice" role="status">WARP 暂未返回报价：' + e(quote.providerError) + '</p>' : ''}
           ${booked ? '<p class="notice">这条报价已生成运单。</p>' : ''}
           ${!booked && pending ? '<p class="notice">当前报价需要更新，更新后即可选用。</p>' : ''}
           ${message ? '<p class="notice">' + e(message) + '</p>' : ''}
           <div id="rate-results">${carrierQuotes(quote, booked, rates)}</div>
-          <p class="note">${quote.source === 'warp-v2' ? '报价与时效来自 V2 Sandbox API · 非生产报价' : '报价与时效为模拟数据'} · 有效期按当前浏览器时间显示</p>
+          <p class="note">${quote.source === 'warp-v2' ? '以上均为 WARP Gateway V2 Sandbox 返回的承运商参考价' : '以上为演示模拟价格'} · 有效期按当前浏览器时间显示</p>
         </div>
       </section>
     </div>`;
@@ -765,9 +764,9 @@ function quickRates(quote, state) {
   return `<div class="detail-block quick-rates">
     <h3 class="subhead">更换承运商</h3>
     ${alternatives.map(rate => {
-      const logo = carrierProfiles[rate.carrierId]?.logo;
+      const logo = rate.logo || carrierProfiles[rate.carrierId]?.logo;
       return `<button type="button" class="quick-rate" aria-pressed="${quote.selectedRateId === rate.id}" aria-label="快速选用 ${e(carrierName(rate))}" data-action="select-rate" data-quote="${e(quote.id)}" data-rate="${e(rate.id)}"${blocked || !(rate.expiresAt > Date.now()) ? ' disabled' : ''}>
-        <span class="quick-rate-carrier">${logo ? '<img src="../assets/carriers/' + logo + '" alt="">' : ''}<span><strong>${e(carrierName(rate))}</strong><small>${e(rate.name)} · ${e(rate.days)}</small></span></span><b>${money(rate.total)}</b>
+        <span class="quick-rate-carrier">${logo ? '<img src="../assets/carriers/' + logo + '" alt=""' + (logo === 'WARP.svg' ? ' class="carrier-logo-dark"' : '') + '>' : ''}<span><strong>${e(carrierName(rate))}</strong><small>${e(rate.name)} · ${e(rate.days)}</small></span></span><b>${money(rate.total)}</b>
       </button>`;
     }).join('')}
   </div>`;
@@ -795,7 +794,7 @@ export function quoteSummary(quote, message = '', review = false) {
       ${message ? '<p class="note" role="status">' + e(message) + '</p>' : ''}
       ${rateActions(quote, review)}
     </div>
-    ${quote.source === 'warp-v2' ? '<p class="notice">WARP 供应商参考价，仅供查价；下单与扣款未开放。</p><button class="btn primary" type="button" disabled>真实下单未开放</button>' : review
+    ${rate?.provider ? '<p class="notice">WARP 供应商参考价，仅供查价；下单与扣款未开放。</p><button class="btn primary" type="button" disabled>真实下单未开放</button>' : review
       ? `<p class="note">确认下单时按所选报价扣款。本页面仅模拟扣款。</p><button class="btn primary" type="button" data-action="confirm-booking" data-quote="${e(quote.id)}"${state === 'valid' ? '' : ' disabled'}>确认下单并扣款</button>`
       : quickRates(quote, state) + '<button class="btn primary" type="submit" form="details-form">核对订单</button>'}`;
 }

@@ -1,4 +1,4 @@
-import { toWarpRequest, normalizeWarpQuote } from '../oms/warp-api.js';
+import { toWarpRequest, toWarpMarketRequest, normalizeWarpQuote, normalizeWarpOptions } from '../oms/warp-api.js';
 
 // Fixed staging host: the supplied Sandbox key is never sent to production.
 const WARP = 'https://stg.wearewarp.com/api/v1';
@@ -25,11 +25,15 @@ export async function handleRequest(request, env = {}, upstream = fetch) {
   let normalized;
   try { normalized = toWarpRequest(JSON.parse(text).shipment); }
   catch (error) { return reply(400, { message: error instanceof SyntaxError ? '请求格式有误。' : error.message }); }
+  const market = normalized.mode === 'LTL';
+  let payload;
+  try { payload = market ? toWarpMarketRequest(normalized.body) : normalized.body; }
+  catch (error) { return reply(400, { message: error.message }); }
   if (!env.WARP_V2_SANDBOX_KEY) return reply(503, { code: 'GATEWAY_NOT_CONFIGURED', message: 'WARP V2 Sandbox 询价后端尚未配置密钥。' });
   try {
-    const result = await upstream(`${WARP}/freights/quote`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', apikey: env.WARP_V2_SANDBOX_KEY }, body: JSON.stringify(normalized.body),
-      redirect: 'error', signal: AbortSignal.timeout(20000)
+    const result = await upstream(`${WARP}/freights/${market ? 'freight-quote' : 'quote'}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', apikey: env.WARP_V2_SANDBOX_KEY }, body: JSON.stringify(payload),
+      redirect: 'error', signal: AbortSignal.timeout(45000)
     });
     const data = await result.json().catch(() => ({}));
     if (!result.ok) {
@@ -37,7 +41,7 @@ export async function handleRequest(request, env = {}, upstream = fetch) {
       const messages = { required_field_missing: 'WARP V2 要求补全询价字段。', invalid_field_data: 'WARP V2 不接受这些货物或服务条件。', request_unauthorized: 'WARP V2 Sandbox 密钥无效或已失效，请在服务端更新。' };
       return reply(result.status === 429 ? 429 : 502, { code: 'UPSTREAM_QUOTE_FAILED', message: result.status === 429 ? 'WARP 询价频率已达上限，请稍后再试。' : messages[code] || 'WARP 暂未返回这条线路的报价，请稍后重试或更换运输方式。' });
     }
-    return reply(200, normalizeWarpQuote(data, normalized.mode, 'staging'));
+    return reply(200, market ? normalizeWarpOptions(data, normalized.mode, 'staging') : { source: 'warp-v2', environment: 'staging', options: [normalizeWarpQuote(data, normalized.mode, 'staging')] });
   } catch (error) { return reply(502, { code: 'WARP_UNAVAILABLE', message: /timeout|abort/i.test(error.name) ? 'WARP 询价超时，请稍后重试。' : 'WARP 询价暂不可用，请稍后重试。' }); }
 }
 export default { fetch(request, env) { return handleRequest(request, env); } };

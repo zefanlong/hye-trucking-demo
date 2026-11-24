@@ -1,6 +1,6 @@
 {
   "purpose": {
-    "stands_in_for": "WARP Gateway API V2 staging /freights/quote only",
+    "stands_in_for": "WARP Gateway V2 staging /freights/quote and /freights/freight-quote",
     "unblocks": "HYE OMS request serialization, response projection and failure handling without using real keys"
   },
   "assumptions": [
@@ -29,6 +29,15 @@
       "reason": "The original emptyShipment/exampleShipment implementation only adds mode for FTL. Explicit unknown modes must still be rejected.",
       "verification": "2026-11-24: added regression using actual exampleShipment LTL/FTL; 10 automated checks pass, including legacy LTL through the HTTP simulation.",
       "source": "oms/model.js emptyShipment; oms/warp-api.js; server/gateway.test.mjs",
+      "updated_at": "2026-11-24"
+    },
+    {
+      "id": "market-options-unit-contract",
+      "status": "supported",
+      "claim": "The marketplace endpoint returns account-enabled carrier options with transitTime in seconds and expirationTs in milliseconds.",
+      "reason": "Official QuoteOption schema and actual staging response agree for the tested LTL lane.",
+      "verification": "2026-11-24: 90001 to 60601, two 400lb pallets, appointment delivery returned HTTP 200 and 17 options from WARP and WWEX. Twelve automated tests cover request mappings, malformed/expired options, duplicates, and rate-specific booking lock. All other lane/account coverage remains unverified.",
+      "source": "contracts/warp-v2.openapi.json FreightQuoteBody/QuoteOption; oms/warp-api.js; server/gateway.test.mjs",
       "updated_at": "2026-11-24"
     }
   ],

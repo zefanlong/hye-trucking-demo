@@ -1,6 +1,6 @@
 # HYE Freight OMS · WARP Gateway API V2 询价 Demo
 
-保留原 OMS 页面，默认查价来源改为 Gateway API V2 **staging**。也可在表单内明确选择原演示模拟报价。WARP 返回失败、无价或超时，界面显示错误，不回退生成模拟价格。
+保留原 OMS 查价入口与承运商报价卡片。点击一次“查看报价”，LTL 从 WARP Gateway V2 **staging** 多承运商接口获取所有可用报价，使用原卡片、排序和筛选，不再选择报价来源。成功返回的卡片均为 API 选项，不混入原模拟价格；失败时提示原因，报价列表留空。历史演示记录仍保留且标识为模拟。
 
 ## 本地运行
 
@@ -12,26 +12,28 @@
 
 也可以从仓库以外读取密钥文件：`node --env-file=/absolute/path/to/private.env server/local.mjs`。
 
-V2 Sandbox 密钥通过 `apikey` 请求头，仅发送到固定的 `https://stg.wearewarp.com/api/v1/freights/quote`。不是 V1 Bearer 密钥。前端不收集、不保存、不发送 WARP 密钥。
+V2 Sandbox 密钥通过 `apikey` 请求头，仅发送到固定的 `https://stg.wearewarp.com/api/v1` 主机上的两个询价路径。不是 V1 Bearer 密钥。前端不收集、不保存、不发送 WARP 密钥。
 
 ## 已接入
 
-- LTL 托盘询价，以及单辆 53ft 干柜、26ft Box Truck、Cargo Van 的请求映射。
+- LTL 多承运商托盘询价，以及单辆 53ft 干柜、26ft Box Truck、Cargo Van 的请求映射。
 - 每行 `totalWeight = 单件重量 × 件数`，保留每行尺寸和数量；公制输入沿用原 OMS 转换为 lb/in 的能力。
 - 住宅、尾板、室内、限制进入、预约送货、展会等可映射附加服务。
 - API 总价、真实费用行、时效、有效期、报价编号和获取时间。费用分项经过分币核对，不从演示费率推算。
 - 明确拒绝暂无法映射的 CFS、亚马逊预约、到货通知、温控及特殊监管货物。没有完整支持的条件不会被悄悄丢弃。
-- 报价过期或日期、货物、服务改变后须重新询价。原有模拟报价不会混入 V2 报价列表。
+- 报价过期或日期、货物、服务改变后须重新询价。所有 API 承运商选项同列展示，并在卡片级保留 Sandbox 与供应商来源标识。
 
-`/freights/quote` 返回一个最低报价，当前页面不是多承运商比价。多承运商接口 `/freights/freight-quote` 尚未接入。当前阶段只开放托盘包装和单车，未验证所有线路及服务组合。
+LTL 调用 `/freights/freight-quote`：请求使用 `items` 和 stop `serviceOptions`，返回 `options[]`，每项 `expirationTs` 为毫秒、`transitTime` 为秒。单车 FTL/Box Truck/Cargo Van 继续调用 `/freights/quote`：请求使用 `listItems` 与服务对象数组，响应的到期时间为秒、时效为天。两个接口分别适配，避免单位及字段混用。当前只支持托盘包装和单车，未验证所有线路/服务；多承运商端点官方标记 Experimental，返回数量取决于账号、线路与启用渠道。
 
 ## 资金与下单边界
 
 WARP 报价只是供应商成本参考，并非 HYE 销售价；未加入 HYE 加价。Sandbox/staging 参考报价不能表述为生产账户正式协议价。
 
-HYE 客户演示余额继续属于原 Demo。WARP 供应商余额未对外开放，也没有映射到客户钱包。V2 报价不进入原 Demo 下单或余额扣减流程。后端只接受一个固定询价路由，拒绝 `/booking`、`/book`、充值、余额等其他操作，且没有通用转发接口。
+HYE 客户演示余额继续属于原 Demo。WARP 供应商余额未对外开放，也没有映射到客户钱包。通过 WARP Gateway 返回的所有承运商报价均不进入原 Demo 下单或余额扣减流程；历史模拟记录保留原模拟下单行为。后端只接受一个固定询价路由，拒绝 `/booking`、`/book`、充值、余额等其他操作，且没有通用转发接口。
 
 本次没有调用任何真实或测试下单、扣款、绑卡、充值接口。
+
+本次实测的 17 个报价选项均匹配本地 Logo。新增 WARP、CCFS、Daylight 官方图片，复用已有 Estes、R+L、XPO、Forward Air、ABF、AAA Cooper、FedEx、Saia、Old Dominion 图片；另补齐历史 Echo 与 Custom Companies 卡片。来源见 `assets/carriers/SOURCES.md`。
 
 ## GitHub Pages 上线
 
@@ -48,12 +50,14 @@ Worker 配置按 IP 提供近似速率限制；本地服务限每小时 30 次�
 
 `npm test` 需要 Postman CLI 1.70+。测试会自动启动本地 Postman simulation，并在结束时关闭，不需要登录 Postman，也不读取真实 WARP 密钥。
 
-10 个检查覆盖真实 HTTP 请求序列化、V2 apikey 认证、总重量和附加服务映射、429、上游 HTML/502、400、无效价格、模式替代、禁止下单、钱包隔离及日期变更。模拟上游是根据官方合同构建的本地替身，不等于 WARP Sandbox。Postman 未登录，未搜索所有者托管 mock。
+12 个检查覆盖真实 HTTP 请求序列化、V2 apikey 认证、总重量和附加服务映射、429、上游 HTML/502、400、无效价格、模式替代、禁止下单、钱包隔离及日期变更。模拟上游是根据官方合同构建的本地替身，不等于 WARP Sandbox。Postman 未登录，未搜索所有者托管 mock。
 
 2026-11-24 使用用户提供的 V2 Sandbox 密钥，对 WARP 官方 staging 进行了实际询价：
 
 - LTL：90001 → 94105，2026-11-25，1 托 × 500 lb，48×40×48 in：HTTP 200，约 $188.65，3 天；界面测试含预约送货 $0.00。
 - FTL：同线路和日期，1 辆 53ft 干柜、20 托 × 500 lb：HTTP 200，约 $2,498.85，1 天。
+
+多承运商 LTL 同线路 2 托 × 400 lb、预约送货实测返回 17 个选项，包括 WARP、Estes、R+L、XPO、Forward Air、ABF、CCFS、AAA Cooper、FedEx、Saia、Daylight、Old Dominion。
 
 这些只是当次测试响应，不保证其他线路、时点或正式账户同价。浏览器验证了桌面与 390px 移动布局，真实询价 → 报价列表，控制台无错误。生产接口、Sandbox 下单、Cloudflare 实际部署未验证。
 

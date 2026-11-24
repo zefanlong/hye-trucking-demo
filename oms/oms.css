@@ -1512,3 +1512,5 @@ body:has(.list-pagination) .toast { bottom: calc(98px + env(safe-area-inset-bott
   .wallet-overview-action { grid-row: 2; grid-column: 1; justify-items: start; }
   .wallet-metrics { grid-row: 3; }
 }
+
+.carrier-identity img.carrier-logo-dark, .quick-rate-carrier img.carrier-logo-dark { background: #101820; padding: 3px; border-radius: 3px; }

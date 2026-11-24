@@ -1,21 +1,21 @@
-import { fetchWarpQuote } from './warp-api.js?v=warp-v2-2';
+import { fetchWarpQuote } from './warp-api.js?v=warp-v2-4';
 import {
-  currentState, emptyShipment, exampleShipment, emptyItem, saveQuote, saveWarpQuote, bookOrder, saveProfile,
+  currentState, emptyShipment, exampleShipment, emptyItem, saveWarpQuote, bookOrder, saveProfile,
   saveAddress, removeAddress, postalCode, addressValue, unitSettings, dateInZone, billingRecords, billHref, money, billStatusText, billAmountLabel, rebillMethodText, collectRebillEarly, walletSnapshot, rechargeWallet, walletRechargeAmount, walletKinds,
-  displayMeasurement, updateQuote, refreshQuote, chooseRate, quoteStatus, pricingReady, detailsReady, hasStreetAddress,
+  displayMeasurement, updateQuote, chooseRate, quoteStatus, pricingReady, detailsReady, hasStreetAddress,
   addressTypes, shortAddress, stopDetailsReady, cargoReady, emptyCommodity, itemCommodities, hazardDeclarationsReady, stopHoursReady,
   shipmentMode, quoteEntry, quoteModes, orderTypes, orderType, orderRoute, orderRecordHref, saveCustomRequest, addressContactFields, createDemoApiKey, revokeDemoApiKey,
   createTicket, updateTicket, caseTypes, caseKind, caseRoute, caseHref, caseCategory, latestCase, validateCase,
   canClaimOrder, canRequestOrderChange, editableOrderStops, planOrderChange, planOrderCargoChange, planOrderCancellation, submitOrderChange,
   emptyCustomStop, customShipmentStops, customCargoRoute, customCargoIdentities, exampleCustomShipment, customRequestStatus, customChangeTicket, submitCustomRequestChange, simulateCustomResponse, bookCustomRequest
-} from './model.js?v=warp-v2-1';
+} from './model.js?v=warp-v2-4';
 import {
   quoteView, ratesView, ordersView, billingView, accountView, accountTabs, walletContent, walletRows, walletRechargeForm, walletRechargeConfirmation, dashboardView, campaignDetails, orderRows, billRows, billDetail,
   addressRows, addressForm, icon, e, detailsView, quoteSummary, confirmationView, carrierQuotes, workflowHeader,
   cargoEditor, cargoTotalsText, cargoItemMetrics, serviceSelectionText, compareRates, orderDetail, customQuoteView, customRecordsView, customInquiryNavigation, customRequestSnapshot, customChangeComparison,
   apiKeyForm, apiKeyResult, ticketRows, ticketDetail, ticketsView, ticketForm, caseForm, caseChargeOptions, paginationControls, pageSizes, quoteAssistantForm, quoteAssistantResult,
   orderChangeEditor, orderChangeReview, orderCancellationForm, customRouteSummary, customStopLabel, customStopCargo
-} from './views.js?v=warp-v2-1';
+} from './views.js?v=warp-v2-4';
 import { customRequestChanges } from './custom-changes.js?v=account-layout';
 import { renderRouteMap } from './route-map.js?v=zip-suggestions';
 import { orderDocument } from './order-documents.js?v=account-layout';
@@ -927,11 +927,13 @@ function explainIncompletePricing(quote) {
 
 async function refreshCurrentQuote(id) {
   const previous = findQuote(id);
-  if (previous?.source !== 'warp-v2') return refreshQuote(id);
+  if (!previous || !pricingReady(previous.shipment)) return null;
   const snapshot = structuredClone(previous.shipment);
-  const result = await fetchWarpQuote(snapshot);
+  let provider = null, providerError = '';
+  try { provider = await fetchWarpQuote(snapshot); }
+  catch (error) { providerError = error.name === 'TimeoutError' ? 'WARP 询价超时，请稍后更新报价。' : error.message; }
   if (JSON.stringify(findQuote(id)?.shipment) !== JSON.stringify(snapshot)) throw new Error('资料有变化，请重新查价。');
-  return saveWarpQuote(snapshot, result, id, previous.details);
+  return saveWarpQuote(snapshot, provider, id, previous.details, providerError);
 }
 
 async function updateRates(id) {
@@ -1410,20 +1412,16 @@ async function saveShipment() {
   }
   const form = workspace.querySelector('#quote-form');
   const snapshot = structuredClone(draft);
-  const source = form.elements.quoteSource.value;
   const submit = form.querySelector('[type="submit"]');
   const oldLabel = submit.innerHTML;
-  quoteRequestRunning = true; submit.disabled = true; submit.textContent = '正在获取 WARP 报价…';
-  let quote;
-  try {
-    quote = source === 'demo' ? saveQuote(snapshot, draftId, assistantDetails)
-      : saveWarpQuote(snapshot, await fetchWarpQuote(snapshot), draftId, assistantDetails);
-  } catch (error) {
-    if (form.isConnected) form.querySelector('#quote-error').textContent = error.name === 'TimeoutError' ? 'WARP 询价超时，请重试。' : error.message;
-    return;
-  } finally { quoteRequestRunning = false; if (submit.isConnected) { submit.disabled = false; submit.innerHTML = oldLabel; } }
+  quoteRequestRunning = true; submit.disabled = true; submit.textContent = '正在获取报价…';
+  let provider = null, providerError = '';
+  try { provider = await fetchWarpQuote(snapshot); }
+  catch (error) { providerError = error.name === 'TimeoutError' ? 'WARP 询价超时，请稍后更新报价。' : error.message; }
+  finally { quoteRequestRunning = false; if (submit.isConnected) { submit.disabled = false; submit.innerHTML = oldLabel; } }
   if (!form.isConnected) return;
   if (JSON.stringify(readShipment()) !== JSON.stringify(snapshot)) { form.querySelector('#quote-error').textContent = '询价期间资料有变化，请按新资料重新查价。'; return; }
+  const quote = saveWarpQuote(snapshot, provider, draftId, assistantDetails, providerError);
   assistantDetails = {};
   quickDrafts.delete(quickDraftKey(shipmentMode(draft), draftId));
   workspace.querySelector('#quote-form').dataset.submitted = 'true';

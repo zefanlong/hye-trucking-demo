@@ -2,7 +2,7 @@ import test, { before, after } from 'node:test';
 import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { handleRequest } from './gateway.mjs';
-import { toWarpRequest, normalizeWarpQuote } from '../oms/warp-api.js';
+import { toWarpRequest, normalizeWarpQuote, normalizeWarpOptions } from '../oms/warp-api.js';
 
 let simulation, mockOrigin;
 before(async () => {
@@ -25,19 +25,19 @@ const shipment = () => ({ mode: 'ltl', origin: '90001', destination: '94105', pi
   items: [{ type: 'pallet', quantity: 2, weight: 500, length: 48, width: 40, height: 48 }] });
 const request = (path = '/api/warp/quote', body = { shipment: shipment() }, origin = 'https://zefanlong.github.io') => new Request('http://127.0.0.1:8787' + path, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body: JSON.stringify(body) });
 const network = fault => (url, options) => {
-  assert.equal(url, 'https://stg.wearewarp.com/api/v1/freights/quote');
+  assert.equal(url, 'https://stg.wearewarp.com/api/v1/freights/freight-quote');
   assert.equal(options.headers.Authorization, undefined);
   const body = JSON.parse(options.body);
   assert.equal(options.headers.apikey, 'test-server-key');
-  assert.deepEqual(body.listItems[0], { quantity: 2, totalWeight: 1000, length: 48, width: 40, height: 48, sizeUnit: 'IN', weightUnit: 'lbs', packaging: 'Pallet', stackable: false });
-  assert.deepEqual(body.deliveryServices, ['liftgate-delivery', 'delivery-appointment', 'residential-delivery'].map(service => ({ quantity: 1, service })));
-  return fetch(mockOrigin + '/warp/api/v1/freights/quote', { ...options, headers: { ...options.headers, ...(fault ? { 'x-mock-response-code': fault } : {}) } });
+  assert.deepEqual(body.items[0], { quantity: 2, totalWeight: 1000, length: 48, width: 40, height: 48, sizeUnit: 'IN', weightUnit: 'lbs', packaging: 'Pallet', stackable: false });
+  assert.deepEqual(body.deliveryInfo.serviceOptions, ['liftgate-delivery', 'delivery-appointment', 'residential-delivery']);
+  return fetch(mockOrigin + '/warp/api/v1/freights/freight-quote', { ...options, headers: { ...options.headers, ...(fault ? { 'x-mock-response-code': fault } : {}) } });
 };
 
 test('V2 authenticated quote travels through real HTTP serialization and returns cents, identity, expiry, CORS', async () => {
   const response = await handleRequest(request(), { WARP_V2_SANDBOX_KEY: 'test-server-key' }, network());
   assert.equal(response.status, 200); assert.equal(response.headers.get('access-control-allow-origin'), 'https://zefanlong.github.io');
-  const body = await response.json(); assert.equal(body.priceCents, 18865); assert.equal(body.source, 'warp-v2'); assert.equal(body.quoteId, 'MOCK_V2_REFERENCE'); assert.ok(body.expiresAt > Date.now());
+  const body = await response.json(); assert.equal(body.options.length, 2); assert.equal(body.options[0].priceCents, 18865); assert.equal(body.source, 'warp-v2'); assert.equal(body.options[0].quoteId, 'MOCK_V2_REFERENCE'); assert.equal(body.options[1].carrierName, 'XPO Logistics'); assert.ok(body.options[0].expiresAt > Date.now());
   assert.equal(body.booking_url, undefined); assert.equal(body.book_tool_call, undefined);
 });
 for (const fault of ['429', '502', '400', '200-invalid']) test('upstream ' + fault + ' never becomes a fabricated price', async () => {
@@ -46,7 +46,7 @@ for (const fault of ['429', '502', '400', '200-invalid']) test('upstream ' + fau
 });
 test('dedicated substitution is flagged and cannot appear as shared LTL', async () => {
   const response = await handleRequest(request(), { WARP_V2_SANDBOX_KEY: 'test-server-key' }, network('substitution'));
-  const body = await response.json(); assert.equal(body.substituted, true); assert.equal(body.mode, 'FTL');
+  const body = await response.json(); assert.equal(body.options[0].substituted, true); assert.equal(body.options[0].mode, 'FTL');
 });
 test('booking, balances, arbitrary upstream paths and hostile origins never contact WARP', async () => {
   const unexpected = () => { throw new Error('upstream must not be contacted'); };
@@ -89,7 +89,7 @@ test('actual OMS LTL example without mode reaches V2; FTL stays explicit and unk
   const response = await handleRequest(request('/api/warp/quote', { shipment: ltl }), { WARP_V2_SANDBOX_KEY: 'test-server-key' }, (url, options) => {
     called = true;
     assert.equal(JSON.parse(options.body).shipmentType, 'LTL');
-    return fetch(mockOrigin + '/warp/api/v1/freights/quote', options);
+    return fetch(mockOrigin + '/warp/api/v1/freights/freight-quote', options);
   });
   assert.equal(called, true);
   assert.equal(response.status, 200);
@@ -98,4 +98,26 @@ test('actual OMS LTL example without mode reaches V2; FTL stays explicit and unk
   assert.equal(ftl.body.shipmentType, 'FTL');
   assert.equal(ftl.body.vehicleType.code, 'DRY_VAN_53');
   assert.throws(() => toWarpRequest({ ...ltl, mode: 'custom' }));
+});
+
+
+test('all API carrier options share native rates; unavailable API creates no simulated prices', async () => {
+  const model = await import('../oms/model.js');
+  const option = { source: 'warp-v2', quoteId: 'COMBINED_REFERENCE', priceCents: 18865, expiresAt: Date.now() + 3600000, transitDays: 3, deliveryDate: '', vehicle: 'LTL', charges: [], missing: [], sourceName: 'WARP', carrierName: 'Warp Technology', carrierCode: 'WTCH' };
+  const combined = model.saveWarpQuote(shipment(), { source: 'warp-v2', options: [option, { ...option, quoteId: 'XPO_REAL_OPTION', carrierCode: 'CNWY', carrierName: 'XPO Logistics', sourceName: 'WWEX', priceCents: 30000 }] });
+  assert.equal(combined.rates.length, 2);
+  assert.ok(combined.rates.every(rate => rate.provider));
+  assert.equal(combined.rates[1].carrierName, 'XPO Logistics');
+  assert.equal(combined.rates[1].logo, 'XPOL.png');
+  for (const rate of combined.rates) { model.chooseRate(combined.id, rate.id); assert.equal(model.bookOrder(combined.id), null); }
+  const failed = model.saveWarpQuote(shipment(), null, combined.id, {}, 'WARP unavailable');
+  assert.deepEqual(failed.rates, []);
+  assert.equal(failed.providerError, 'WARP unavailable');
+});
+
+test('market expiry is milliseconds, transit is seconds, invalid and duplicate options are excluded', () => {
+  const row = { source: 'WWEX', id: 'VALID', carrierName: 'XPO', carrierCode: 'CNWY', shipmentType: 'LTL', rate: 123.45, currency: 'USD', expirationTs: Date.now() + 60000, transitTime: 561600, serviceCharges: [] };
+  const result = normalizeWarpOptions({ options: [row, row, { ...row, id: 'EXPIRED', expirationTs: 1 }, { ...row, id: 'BAD', rate: -1 }] }, 'LTL');
+  assert.equal(result.options.length, 1); assert.equal(result.rejectedOptions, 3);
+  assert.equal(result.options[0].transitDays, 6.5); assert.equal(result.options[0].priceCents, 12345);
 });

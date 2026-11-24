@@ -62,15 +62,48 @@ export function normalizeWarpQuote(data, requestedMode, environment = 'staging')
   };
 }
 
+export function toWarpMarketRequest(body) {
+  if (body.listItems.some(item => item.height > 85)) throw new Error('WARP 多承运商 LTL 接口高度上限为 85 in。');
+  return { pickupDate: body.pickupDate,
+    pickupInfo: { ...body.pickupInfo, serviceOptions: body.pickupServices.map(row => row.service) },
+    deliveryInfo: { ...body.deliveryInfo, serviceOptions: body.deliveryServices.map(row => row.service) },
+    items: body.listItems, shipmentType: body.shipmentType,
+    ...(body.vehicleType ? { vehicleType: body.vehicleType } : {}),
+    additionalServices: body.additionalServices.map(row => row.service) };
+}
+
+export function normalizeWarpOptions(data, requestedMode, environment = 'staging') {
+  if (!Array.isArray(data?.options)) throw new Error('WARP 未返回承运商报价列表。');
+  const options = [], seen = new Set();
+  for (const row of data.options.slice(0, 200)) {
+    const priceCents = Math.round(row?.rate * 100);
+    if (typeof row?.rate !== 'number' || !Number.isSafeInteger(priceCents) || priceCents <= 0 || row.currency !== 'USD' || typeof row.id !== 'string' || !row.id || typeof row.expirationTs !== 'number' || row.expirationTs <= Date.now() || !Number.isFinite(row.expirationTs) || seen.has(row.id)) continue;
+    if (typeof row.carrierName !== 'string' || !row.carrierName.trim() || !['LTL', 'FTL'].includes(row.shipmentType)) continue;
+    seen.add(row.id);
+    const charges = Array.isArray(row.serviceCharges) ? row.serviceCharges.filter(c => typeof c.amount === 'number' && Number.isFinite(c.amount)).map(c => ({ code: String(c.code).slice(0, 80), description: String(c.description ?? '').slice(0, 200), cents: Math.round(c.amount * 100) })).slice(0, 40) : [];
+    options.push({ source: 'warp-v2', environment, fetchedAt: Date.now(), quoteId: row.id, priceCents,
+      sourceName: String(row.source ?? '').slice(0, 80), carrierName: row.carrierName.trim().slice(0, 150), carrierCode: String(row.carrierCode ?? '').slice(0, 30),
+      serviceLevel: String(row.serviceLevel ?? '').slice(0, 80), optionName: String(row.name ?? '').slice(0, 150),
+      expiresAt: row.expirationTs, transitDays: typeof row.transitTime === 'number' && Number.isFinite(row.transitTime) && row.transitTime >= 0 ? row.transitTime / 86400 : null,
+      deliveryDate: /^\d{4}-\d{2}-\d{2}$/.test(row.estimatedDeliveryDate ?? '') ? row.estimatedDeliveryDate : '',
+      mode: row.shipmentType, vehicle: row.shipmentType, substituted: requestedMode === 'LTL' && row.shipmentType !== 'LTL',
+      tier: 'reference', included: [], missing: [], charges,
+      chargesReconcile: charges.length > 0 && charges.filter(c => c.code !== 'TOTAL').reduce((sum, c) => sum + c.cents, 0) === priceCents });
+  }
+  if (!options.length) throw new Error('WARP 暂未返回有效承运商报价。');
+  options.sort((a, b) => a.priceCents - b.priceCents);
+  return { source: 'warp-v2', environment, options, rejectedOptions: data.options.length - options.length };
+}
+
 export async function fetchWarpQuote(shipment) {
   toWarpRequest(shipment); // Fail before sending an unsupported shipment.
   const base = globalThis.HYE_WARP_CONFIG?.gatewayUrl ?? '';
   const response = await fetch(`${base}/api/warp/quote`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shipment }),
-    signal: AbortSignal.timeout(25000), credentials: 'omit', referrerPolicy: 'no-referrer'
+    signal: AbortSignal.timeout(50000), credentials: 'omit', referrerPolicy: 'no-referrer'
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.message || '询价服务不可用。GitHub Pages 需配置独立询价后端；本地可运行 npm start。');
-  if (data.source !== 'warp-v2' || !Number.isSafeInteger(data.priceCents) || data.priceCents <= 0 || !(data.expiresAt > Date.now())) throw new Error('询价服务返回了无效报价。');
+  if (data.source !== 'warp-v2' || !Array.isArray(data.options) || !data.options.length || data.options.some(row => !Number.isSafeInteger(row.priceCents) || row.priceCents <= 0 || !(row.expiresAt > Date.now()))) throw new Error('询价服务返回了无效报价。');
   return data;
 }

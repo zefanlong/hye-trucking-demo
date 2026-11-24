@@ -276,8 +276,8 @@ export const carrierProfiles = {
   odfl: { name: 'Old Dominion', logo: 'ODFL.png' },
   saia: { name: 'Saia', logo: 'SAIA.png' },
   tfin: { name: 'TForce Freight', logo: 'TFIN.png' },
-  ctbv: { name: 'Custom Companies' },
-  echs: { name: 'Echo Global Logistics' },
+  ctbv: { name: 'Custom Companies', logo: 'CSTM.png' },
+  echs: { name: 'Echo Global Logistics', logo: 'ECHO.svg' },
   'ftl-economy': { name: '整车承运渠道 A' },
   'ftl-standard': { name: '整车承运渠道 B' },
   'ftl-express': { name: '整车承运渠道 C' }
@@ -910,23 +910,27 @@ export function saveQuote(shipment, previousId, supplemental = {}) {
   return storeQuote(state, priceQuote({ ...previous, id: previous?.id ?? idFor('QT-'), stage: 'compare', details }, shipment));
 }
 
-// Provider quotes remain separate from all demo pricing and demo ledger writes.
-export function saveWarpQuote(shipment, provider, previousId, supplemental = {}) {
+// One comparison list; provenance stays on each rate so API prices never enter demo billing.
+export function saveWarpQuote(shipment, provider, previousId, supplemental = {}, providerError = '') {
   const state = currentState();
-  const previous = state.quotes.find(entry => entry.id === previousId && entry.source === 'warp-v2');
+  const previous = state.orders.some(order => order.quoteId === previousId) ? null : state.quotes.find(entry => entry.id === previousId);
   const id = previous?.id ?? idFor('QT-');
-  const rate = {
-    id: 'warp-' + provider.quoteId, carrierId: 'warp', carrierName: 'WARP',
-    name: provider.substituted ? 'WARP 专车替代方案（非共享 LTL）' : 'WARP ' + provider.vehicle,
-    total: provider.priceCents, freight: provider.priceCents, accessorial: 0,
-    expiresAt: provider.expiresAt, reference: provider.quoteId, provider,
-    days: provider.transitDays == null ? '待确认' : provider.transitDays + ' 天（API 返回）',
-    businessDays: [], deliveryDate: provider.deliveryDate
-  };
-  return storeQuote(state, { id, stage: 'compare', source: 'warp-v2', provider,
-    shipment: structuredClone(shipment), pricedFor: pricingSnapshot(shipment), rates: [rate],
+  const options = provider?.options ?? (provider ? [provider] : []);
+  const logos = { WTCH: 'WARP.svg', EXLA: 'EXLA.png', RLCA: 'RLCA.png', CNWY: 'XPOL.png', FWRA: 'FWDN.png', FWDN: 'FWDN.png', ABFS: 'ABFS.png', CCYQ: 'CCFS.svg', AACT: 'AACT.png', FXNL: 'FXFE.png', FXFE: 'FXFE.png', SAIA: 'SAIA.png', DYLT: 'DYLT.png', ODFL: 'ODFL.png' };
+  const rates = options.map(option => {
+    const code = option.carrierCode || (option.sourceName === 'WARP' || !option.carrierName ? 'WTCH' : '');
+    const service = { STANDARD: '标准方案', GUARANTEED: '保证送达', STD: '标准方案' }[option.serviceLevel] || option.serviceLevel || option.vehicle;
+    return { id: 'warp-' + option.quoteId, carrierId: option.sourceName === 'WARP' || !option.carrierName ? 'warp' : 'api-' + code,
+      carrierName: option.sourceName === 'WARP' ? 'WARP' : option.carrierName || 'WARP', logo: logos[code],
+      name: option.substituted ? '专车替代方案（非共享 LTL）' : service,
+      total: option.priceCents, freight: option.priceCents, accessorial: 0, expiresAt: option.expiresAt, reference: option.quoteId, provider: option,
+      days: option.transitDays == null ? '待确认' : Number(option.transitDays.toFixed(2)) + ' 天（API 返回）',
+      businessDays: [], deliveryDate: option.deliveryDate };
+  });
+  return storeQuote(state, { id, stage: 'compare', source: 'warp-v2', provider, providerError,
+    shipment: structuredClone(shipment), pricedFor: pricingSnapshot(shipment), rates,
     date: dateInZone(), details: { ...previous?.details, ...supplemental }, selectedRateId: '', acceptedRate: null,
-    changeReason: previous ? 'WARP 已重新询价，请重新选用报价。' : '' });
+    changeReason: previous ? '承运商报价已更新，请重新选用报价。' : '' });
 }
 
 export function updateQuote(id, update) {
@@ -939,7 +943,7 @@ export function updateQuote(id, update) {
 export function refreshQuote(id) {
   const state = currentState();
   const quote = state.quotes.find(entry => entry.id === id);
-  if (!quote || quote.source === 'warp-v2' || !pricingReady(quote.shipment) || state.orders.some(order => order.quoteId === id)) return null;
+  if (!quote || ['warp-v2', 'combined'].includes(quote.source) || !pricingReady(quote.shipment) || state.orders.some(order => order.quoteId === id)) return null;
   return storeQuote(state, priceQuote(quote, quote.shipment));
 }
 
@@ -958,7 +962,7 @@ export function bookOrder(quoteId) {
   if (existing) return existing;
 
   const quote = state.quotes.find(entry => entry.id === quoteId);
-  if (!quote || quote.source === 'warp-v2' || quoteStatus(quote) !== 'valid' || !detailsReady(quote)) return null;
+  if (!quote || selectedRate(quote)?.provider || quoteStatus(quote) !== 'valid' || !detailsReady(quote)) return null;
   const rate = selectedRate(quote);
   const shipment = { ...quote.shipment, items: quote.shipment.items.map(item => item.commodities ? {
     ...item, commodities: item.commodities.map(({ hazmat, ...commodity }) => commodity.regulated.includes('hazmat') ? { ...commodity, hazmat } : commodity)
