@@ -70,7 +70,8 @@ test('supplier payment hold is preserved without false debit or production payme
   try {
     const result = await f.checkout.book(f.session, f.body); assert.equal(result.status, 'awaiting_payment'); assert.equal(result.testDebitCents, 0); assert.equal(result.wallet.debitedCents, 0); assert.equal(result.paymentLink, undefined); await f.checkout.book(f.session, f.body); assert.equal(f.writes(), 1);
     const model = await import('../oms/model.js'); const quote = model.saveWarpQuote(f.body.shipment, { options: [f.option] }); model.chooseRate(quote.id, quote.rates[0].id);
-    assert.equal(model.recordSandboxOrder(quote.id, result).status, 'awaiting_payment');
+    const order = model.recordSandboxOrder(quote.id, result);
+    assert.equal(order.status, 'awaiting_payment');
   } finally { f.checkout.close(); }
 });
 test('wrong session, tampered amount or freight, missing confirmation and invalid time never call supplier', async () => {
