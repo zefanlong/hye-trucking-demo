@@ -1,12 +1,13 @@
+import { calculateLoadSpace, loadSpaceView } from './load-space.js?v=whole-truck-1';
 import {
   serviceOptions, selectedServices, addressTypes, addressTypeFor, zones, unitSettings, packaging, orderStatuses, orderTypes, orderType, orderRoute, orderRecordHref, rebillStatuses, rebillCollectionRule, billStatusText, billAmountLabel, rebillCountdownText, rebillMethodText, walletKinds,
   dateInZone, totals, displayAddress, shortAddress, addressValue, invoiceId, billingRecords, money, displayMeasurement,
   carrierProfiles, selectedRate, quoteStatus, postalCode, stopDetailsReady, itemCommodities, itemFreightClasses,
-  hazardClasses, packingGroups, hazardIdPattern, stopSupplement, cargoReady, estimatedLinearFeet, orderDocuments,
+  hazardClasses, packingGroups, hazardIdPattern, stopSupplement, cargoReady, orderDocuments,
   quoteModes, shipmentMode, quoteEntry, equipmentTypes, equipmentSummary, addressContactFields, ticketStatuses, ticketCategories, billHref,
   caseTypes, caseKind, caseRoute, caseHref, caseCategory, disputeReasons, claimReasons,
   canClaimOrder, canRequestOrderChange, editableOrderStops, orderStopValues, orderChangeLabels, orderStopLabel, customShipmentStops, customCargoRoute, customRequestStatuses, customRequestStatus, customChangeTicket
-} from './model.js?v=warp-sandbox-booking-1';
+} from './model.js?v=demo-scenarios-1';
 import { customRequestChanges } from './custom-changes.js?v=account-layout';
 import { callingCodes, parsePhone } from './phone-input.js?v=phone-input-2';
 
@@ -532,7 +533,9 @@ export function customQuoteView(profile, requests, request, addresses, draft, ti
   return `${heading}<div class="stack custom-quote custom-quote-editor">
     ${editing ? `<div class="custom-edit-banner"><div><strong>修改询价资料 · ${e(editing.id)}</strong><p class="note">修改字段会标注「已修改」，提交后生成工单，审核通过后生效。<span id="custom-change-count"></span></p></div><a class="link" href="#custom/${e(editing.id)}">返回记录</a></div>` : ''}
     <form id="custom-quote-form" class="stack" data-draft-key="${e(editing?.id ?? 'new')}"${editing ? ` data-request="${e(editing.id)}"` : ''}>
-      <section class="panel panel-inset custom-route-overview" id="custom-route-preview">${customRouteSummary(stops, shipment, units)}</section>
+      <section class="panel panel-inset custom-route-panel" aria-labelledby="custom-route-heading">
+        <div class="panel-head"><h2 class="panel-title" id="custom-route-heading">提送货信息</h2><p class="note">支持多提多卸</p></div>
+        <div class="custom-route-overview" id="custom-route-preview">${customRouteSummary(stops, shipment, units)}</div>
       <div class="details-stops custom-stop-columns">${['origin', 'destination'].map(side => {
         const name = side === 'origin' ? '提货' : '送货';
         return `<section class="custom-stops-group" aria-labelledby="custom-${side}-title">
@@ -540,6 +543,7 @@ export function customQuoteView(profile, requests, request, addresses, draft, ti
           <div class="custom-stops-list">${stops[side].map((stop, index) => customStopFields(stop, side, index, stops[side].length, shipment, units)).join('')}</div>
         </section>`;
       }).join('')}</div>
+      </section>
       ${addressSuggestions(addresses)}
       ${cargoEditor({ shipment }, units, stops)}
       <section class="panel panel-inset custom-needs" aria-labelledby="custom-needs-heading">
@@ -683,14 +687,14 @@ function shipmentOverview(quote, units, booked) {
   const { weight, length, weightFactor, lengthFactor } = unitSettings[units];
   const cargo = totals(shipment);
   const completeCargo = cargoReady(shipment);
-  const linearFeet = completeCargo ? estimatedLinearFeet(shipment) : Infinity;
+  const loadPlan = calculateLoadSpace(shipment.items, shipment);
+  const linearFeet = loadPlan.status === 'ok' ? loadPlan.linearFeet : Infinity;
   const showMeasurement = (value, factor) => value > 0 ? cargoNumber.format(value * factor) : '—';
   const cargoItems = shipment.items.map(item => {
     const classes = shipmentMode(shipment) === 'ltl' ? itemFreightClasses(item) : [];
     return `<li>
       <strong>${e(item.quantity || '—')} × ${e(packaging[item.type] ?? '包装待填')}</strong>
-      <span>${[item.length, item.width, item.height].map(value => showMeasurement(value, lengthFactor)).join(' × ')} ${length} · 单件 ${showMeasurement(item.weight, weightFactor)} ${weight}</span>
-      ${classes.length ? `<span>Class ${e(classes.join(' / '))}</span>` : ''}
+      <span class="overview-cargo-details"><span>${[item.length, item.width, item.height].map(value => showMeasurement(value, lengthFactor)).join(' × ')} ${length}</span><span>${showMeasurement(item.weight, weightFactor)} ${weight}/件</span>${classes.length ? `<span>Class ${e(classes.join(' / '))}</span>` : ''}</span>
     </li>`;
   }).join('');
   const stops = [['origin', 'A', '提货'], ['destination', 'B', '送货']];
@@ -710,11 +714,11 @@ function shipmentOverview(quote, units, booked) {
       ${shipmentMode(shipment) === 'ftl' ? `<p class="note">${e(equipmentSummary(shipment))}</p>` : ''}
       <dl class="overview-metrics">
         <div><dt>总重</dt><dd>${showMeasurement(cargo.weight, weightFactor)} ${weight}</dd></div>
-        <div><dt>线性英尺</dt><dd>${Number.isFinite(linearFeet) ? `${cargoNumber.format(linearFeet)} ft` : '—'}</dd></div>
+        <div><dt>${loadPlan.unplaced ? '已装线尺' : '线性英尺'}</dt><dd>${Number.isFinite(linearFeet) ? `${cargoNumber.format(linearFeet)} ft` : '—'}</dd></div>
         <div><dt>密度</dt><dd>${completeCargo ? `${cargoNumber.format(cargo.weight / cargo.volume)} lb/ft³` : '—'}</dd></div>
       </dl>
-      <ul class="overview-cargo">${cargoItems}</ul>
-      <p class="note">线性英尺按 96 in 可用车厢宽度、不叠放估算</p>
+      <ul class="overview-cargo" aria-label="货物尺寸与明细">${cargoItems}</ul>
+      ${loadSpaceView(loadPlan)}
     </section>
     <section class="overview-section" aria-labelledby="services-overview-heading">
       <h3 class="subhead" id="services-overview-heading">附加服务</h3>
@@ -1123,7 +1127,7 @@ export function orderRows(orders, selectedId, kind) {
     const references = [order.details?.originReference && '提货 ' + order.details.originReference,
       order.details?.destinationReference && '送货 ' + order.details.destinationReference].filter(Boolean);
     if (!references.length && order.reference) references.push(order.reference);
-    const route = routeLabel(order.shipment);
+    const route = order.shipment.mode === 'custom' ? routeLabel(order.shipment) : `<span class="list-route"><span>${e(shortAddress(order.shipment.origin))}</span><span class="list-route-destination">${icon('arrow')}${e(shortAddress(order.shipment.destination))}</span></span>`;
     const timing = orderListTiming(order);
     const number = String(order.proNumber ?? '').trim();
     const context = order.status === 'inquiry' ? `<span class="list-cell-preview" title="${e(order.requirements)}">${e(order.requirements || '定制询价')}</span>`
@@ -1166,14 +1170,18 @@ export function billRows(bills, selectedId, { type, ordersById }) {
   </tr>`;
   }).join('') || emptyRow(type === 'rebills' ? 5 : 4, type === 'rebills' ? '没有符合条件的补收账单' : '没有符合条件的账单');
 }
+const shipmentStageText = { ready: '等待承运商提货', picked: '货物已交接给承运商', transit: '货物正在运往送货地点', delivered: '货物已完成签收' };
 function tracking(order) {
   if (order.status === 'cancelled') return '';
   if (order.status === 'awaiting_payment') return '<p class="note">供应商待付款，尚未确认运输安排。</p>';
   const stages = Object.entries(orderStatuses).filter(([id]) => !['cancelled', 'awaiting_payment'].includes(id));
   const progress = stages.findIndex(([id]) => id === order.status);
-  return `<ol class="order-progress" aria-label="运输节点">${stages.map(([id, name], index) =>
-    `<li${index <= progress ? ' class="done"' : ''}${id === order.status ? ' aria-current="step"' : ''}><span class="order-progress-dot" aria-hidden="true"></span><span>${name}</span></li>`
-  ).join('')}</ol>`;
+  return `<ol class="order-progress inspector-progress" aria-label="运输节点">${stages.map(([id, name], index) => {
+    const event = order.trackingEvents?.find(event => event.status === id);
+    const description = event ? ticketTime(event.at) + ' · ' + e(event.text)
+      : index === 0 && index < progress ? '订单已创建' : index <= progress ? e(shipmentStageText[id] || '') : '待更新';
+    return `<li${index <= progress ? ' class="done"' : ''}${id === order.status ? ' aria-current="step"' : ''}><span class="order-progress-dot" aria-hidden="true">${index < progress ? '✓' : ''}</span><div><strong>${index === 0 && index < progress ? '已创建' : name}</strong><small>${description}</small></div></li>`;
+  }).join('')}</ol>`;
 }
 
 function orderOverviewSchedule(order) {
@@ -1194,28 +1202,26 @@ function orderOverviewSchedule(order) {
 }
 
 function orderOverview(order, tickets, claim) {
-  const { shipment, rate } = order;
+  const { shipment } = order;
+  const rate = order.rate ?? {};
   const proNumber = String(order.proNumber ?? '').trim();
   const pending = tickets.filter(ticket => ticket.status !== 'closed');
   const resolved = tickets.filter(ticket => ticket.status === 'closed');
   const needsAttention = ticket => ticket.customerActionRequired === true || ticket.orderChange?.side === 'cancel' || ticket.orderChange?.addressChange;
   const priority = pending.filter(needsAttention).sort((first, second) => Number(second.customerActionRequired === true) - Number(first.customerActionRequired === true));
   const endpoint = (side, pin, label) => `<div class="order-overview-stop"><span class="overview-pin${side === 'destination' ? ' destination' : ''}" aria-hidden="true">${pin}</span><div><span class="note">${label}</span><strong>${e(shortAddress(shipment[side]) || '—')}</strong></div></div>`;
-  return `<div class="order-overview">
-    <section class="order-overview-schedule" aria-label="运输时间和进度">
-      <dl class="order-overview-times">${orderOverviewSchedule(order).map(([label, value, note]) =>
-        `<div><dt>${label}</dt><dd><strong>${e(value)}</strong>${note ? `<small class="note">${e(note)}</small>` : ''}</dd></div>`
-      ).join('')}</dl>${tracking(order)}
+  const latestEvent = order.trackingEvents?.at(-1);
+  const latest = latestEvent?.text || (order.status === 'cancelled' ? '运单已取消' : order.status === 'awaiting_payment' ? '供应商待付款，尚未确认运输安排' : shipmentStageText[order.status] || orderStatuses[order.status]);
+  const cargo = shipment.items?.length ? cargoLabel(shipment) : shipment.mode === 'ftl' ? equipmentSummary(shipment) : '';
+  return `<div class="order-overview inspector-overview">
+    <section class="inspector-shipment" aria-label="承运商与路线">
+      <div class="inspector-carrier">${carrierIdentity(rate, '')}<div class="inspector-pro"><span class="note">PRO</span><strong class="order-pro-number">${e(proNumber || (order.status === 'cancelled' ? '未记录' : '待回传'))}</strong></div></div>
+      ${shipment.mode === 'custom' && shipment.stops ? customRouteSummary(customShipmentStops(shipment, order.details), shipment, order.units) : `<div class="inspector-route">${endpoint('origin', 'A', '提货')}${endpoint('destination', 'B', '送货')}</div>`}
     </section>
     ${orderOverviewActivity(priority, '需关注', true)}
-    <section class="order-overview-section" aria-labelledby="order-overview-route-title">
-      <h3 class="subhead" id="order-overview-route-title">运输概况</h3>
-      ${shipment.mode === 'custom' && shipment.stops ? customRouteSummary(customShipmentStops(shipment, order.details), shipment, order.units) : `<div class="order-overview-route">${endpoint('origin', 'A', '提货地')}${icon('arrow', 'order-overview-arrow')}${endpoint('destination', 'B', '送货地')}</div>`}
-      <dl class="order-overview-carrier">
-        <div><dt class="note">承运商</dt><dd>${carrierIdentity(rate, rate.name || rate.days || '')}</dd></div>
-        <div class="order-overview-pro"><dt class="note">PRO 号</dt><dd${proNumber ? ' class="order-pro-number"' : ' class="note"'}>${e(proNumber || (order.status === 'cancelled' ? '未记录' : '待回传'))}</dd></div>
-      </dl>
-    </section>
+    <section class="inspector-latest" aria-label="最新动态"><div class="panel-head"><h3 class="subhead">最新动态</h3>${latestEvent ? `<span class="note">${ticketTime(latestEvent.at)}</span>` : ''}</div><p>${e(latest)}</p><dl>${orderOverviewSchedule(order).map(([label, value, note]) => `<div><dt>${label}</dt><dd>${e(value)}${note ? `<small>${e(note)}</small>` : ''}</dd></div>`).join('')}</dl></section>
+    ${order.status !== 'cancelled' ? `<section class="order-overview-section inspector-tracking"><h3 class="subhead">运输进度</h3>${tracking(order)}</section>` : ''}
+    ${cargo ? `<p class="inspector-cargo"><span>货物摘要</span>${e(cargo)}</p>` : ''}
     ${orderOverviewActivity(pending.filter(ticket => !needsAttention(ticket)), '变更申请')}
     ${orderOverviewActivity(resolved, '变更记录')}
     ${claim?.status === 'closed' ? `<a class="link order-claim-history" href="${e(caseHref(claim))}">查看索赔记录 ${icon('arrow')}</a>` : ''}
@@ -1421,8 +1427,8 @@ export function orderDetail(order, activeTab, totalCount, claim, kind, changes) 
       <button class="link" type="button" data-action="new-ticket" data-order="${e(order.id)}" aria-label="创建工单" aria-haspopup="dialog">${orderActionText('创建工单', '工单')}</button>${claims}${cancel}
     </div>
   </div>`;
-  return managementDetail(title, tabPanels('order', sections, activeTab, 'detail-body order-tab-body'),
-    order.id, status(order.status, orderStatuses), controls);
+  return managementDetail(e(order.id), tabPanels('order', sections, activeTab, 'detail-body order-tab-body'),
+    order.reference ? '参考号 ' + order.reference : order.shipment.mode === 'ftl' ? 'FTL 整车' : order.shipment.mode === 'custom' ? '定制服务' : 'LTL 零担', status(order.status, orderStatuses), controls);
 }
 function billDisclosure(title, preview, content) {
   return `<details class="bill-disclosure">
@@ -1458,7 +1464,7 @@ export function billDetail(bill, billing, dispute) {
   const related = billing.records.filter(entry => entry.originalId === bill.id);
   const order = billing.ordersById.get(bill.orderId);
   const amount = `<dl class="bill-detail-amount"><dt>${billAmountLabel(bill)} (USD)</dt><dd>${money(bill.total)}</dd></dl>`;
-  const body = `<div class="detail-body">
+  const body = `<div class="detail-body">${amount}
     <section class="detail-block">${detailList([
       ...(bill.originalId ? [['原账单', `<a class="link" href="#billing/${e(bill.orderId)}">${e(bill.originalId)}</a>`]] : []),
       ...(bill.originalId ? [['出账日期', e(bill.issuedOn || '—')],
@@ -1471,9 +1477,10 @@ export function billDetail(bill, billing, dispute) {
     ${order ? billOrderDisclosure(order) : detailList([['关联运单', e(bill.orderId)]])}
     ${bill.originalId ? billAdjustmentDisclosure(bill, false) : ''}
     ${related.length ? `<section class="detail-block"><h3 class="subhead">关联补收账单</h3>${related.map(entry => billAdjustmentDisclosure(entry, true)).join('')}</section>` : ''}
-    <div class="actions end bill-detail-actions">${bill.originalId && bill.paymentStatus === 'scheduled' ? `<button type="button" class="btn primary small" data-action="collect-rebill-early" data-bill="${e(bill.id)}">提前确认扣款</button>` : ''}${caseEntry('disputes', bill, dispute)}<button type="button" class="btn ${bill.originalId && bill.paymentStatus === 'scheduled' ? '' : 'primary'} small" data-action="download-bill" data-bill="${e(bill.id)}">下载账单明细</button></div>
+
     </div>`;
-  return managementDetail(title, body, bill.id, billStatusBadge(bill) + amount);
+  const controls = `<div class="order-toolbar inspector-toolbar"><h3 class="inspector-section-label" id="bill-overview-title">总览</h3>    <div class="order-toolbar-actions">${bill.originalId && bill.paymentStatus === 'scheduled' ? `<button type="button" class="btn primary small" aria-label="提前确认扣款" data-action="collect-rebill-early" data-bill="${e(bill.id)}">提前扣款</button>` : ''}${caseEntry('disputes', bill, dispute, '申诉')}<button type="button" class="btn ${bill.originalId && bill.paymentStatus === 'scheduled' ? '' : 'primary'} small" aria-label="下载账单明细" data-action="download-bill" data-bill="${e(bill.id)}">下载</button></div></div>`;
+  return managementDetail(e(bill.id), `<div class="inspector-tab-body bill-tab-body" id="bill-panel-overview" role="region" aria-labelledby="bill-overview-title" tabindex="0">${body}</div>`, (bill.originalId ? '补收账单' : '账单') + ' · ' + bill.orderId, billStatusBadge(bill), controls);
 }
 function listingSearch(placeholder, query) {
   return `<label class="with-icon"><span class="sr-only">${placeholder}</span>${icon('search')}<input class="text-input" type="search" name="query" placeholder="${placeholder}" value="${e(query)}"></label>`;
@@ -1492,24 +1499,24 @@ function managementTabs(label, tabs, active, summary = '') {
 }
 function managementDetail(title, body, id, actions = '', tabs = '') {
   return `<div class="management-detail-head">
-    <header class="panel-head"><div><h2 class="panel-title" id="detail-title" tabindex="-1"${id ? ' aria-describedby="detail-record-id"' : ''}>${title}</h2>${id ? `<p class="note" id="detail-record-id">${e(id)}</p>` : ''}</div>
+    <header class="panel-head"><div><h2 class="panel-title" id="detail-title" tabindex="-1" title="${title}"${id ? ' aria-describedby="detail-record-id"' : ''}>${title}</h2>${id ? `<p class="note" id="detail-record-id" title="${e(id)}">${e(id)}</p>` : ''}</div>
       ${actions ? `<div class="actions management-detail-actions">${actions}</div>` : ''}</header>${tabs}
   </div><div class="management-detail-scroll"${tabs ? '' : ' tabindex="0" role="region" aria-labelledby="detail-title"'}>${body}</div>`;
 }
-function managementPage({ title, kind, label, tabs = '', toolbar, headers, rows, detail, result, sidePanel = '' }) {
+function managementPage({ title, kind, label, tabs = '', toolbar, headers, rows, detail, result }) {
   return `<h1 class="sr-only" tabindex="-1">${title}</h1>
-    <div class="panel management-tools" data-filters="${kind}">${tabs}${toolbar}</div>
-    <div class="management-workspace${sidePanel ? ' has-side-panel' : ''}">
-      ${sidePanel}
-      <div class="panel management-list"><div class="table-wrap" tabindex="0" role="region" aria-label="${label}"><table aria-label="${label}">
-        <thead><tr>${headers.map(header => {
-          const [name, className] = typeof header === 'string' ? [header] : header;
-          return `<th scope="col"${className ? ` class="${className}"` : ''}>${name}</th>`;
-        }).join('')}</tr></thead>
-        <tbody id="listing-rows">${rows}</tbody>
-      </table></div></div>
+    <div class="management-workspace management-inspector-layout" data-management-page="${kind}">
+      <section class="panel management-primary" aria-label="${label}">
+        <div class="management-tools" data-filters="${kind}">${tabs}${toolbar}</div>
+        <div class="management-list"><div class="table-wrap" tabindex="0" role="region" aria-label="${label}"><table aria-label="${label}">
+          <thead><tr>${headers.map(header => {
+            const [name, className] = typeof header === 'string' ? [header] : header;
+            return `<th scope="col"${className ? ` class="${className}"` : ''}>${name}</th>`;
+          }).join('')}</tr></thead><tbody id="listing-rows">${rows}</tbody>
+        </table></div></div>${paginationControls(kind, result)}
+      </section>
       <aside class="panel detail management-detail" aria-labelledby="detail-title">${detail}</aside>
-    </div>${paginationControls(kind, result)}`;
+    </div>`;
 }
 
 export const pageSizes = [20, 50, 100];
@@ -1538,12 +1545,13 @@ export function paginationControls(kind, { page, size, pageCount, total, offset,
 }
 
 export function ordersView(result, filter, detail, totalCount, activeTab, counts, claim, kind, changes) {
+  const visibleStatuses = Object.fromEntries(Object.entries(orderStatuses).filter(([key]) => !['awaiting_payment', 'cancelled'].includes(key) || counts[key] > 0 || filter.status === key));
   return managementPage({
     title: '订单管理', kind, label: orderTypes[kind] + '列表', result,
     tabs: managementTabs('运输类型', Object.entries(orderTypes).map(([key, label]) => [key, orderRoute(key), label]), kind),
     toolbar: kind === 'custom'
       ? managementToolbar(customOrderStatuses, filter, counts, '搜索记录编号、线路或需求')
-      : managementToolbar(orderStatuses, filter, counts, '搜索运单号、PRO、参考号或线路'),
+      : managementToolbar(visibleStatuses, filter, counts, '搜索运单号、PRO、参考号或线路'),
     headers: [kind === 'custom' ? '记录编号' : '运单号', ['提送货路线', 'list-table-medium'],
       [kind === 'custom' ? '需求 / 承运商' : '承运商 / PRO', 'list-table-wide'], ['状态', 'list-table-status'], ['关键时间', 'list-table-medium list-table-time']],
     rows: orderRows(result.rows, detail?.id, kind), detail: orderDetail(detail, activeTab, totalCount, claim, kind, changes)
@@ -1581,7 +1589,7 @@ function evidenceField() {
   return `<label class="field"><span>相关凭证（选填）</span><input name="evidence" type="file" multiple accept="image/png,image/jpeg,application/pdf"><small class="note">最多 3 个 JPG、PNG 或 PDF，每个不超过 2 MB。</small></label>`;
 }
 
-export function ticketDetail(ticket, order, emptyMessage, kind, bill, customRequest) {
+export function ticketDetail(ticket, order, emptyMessage, kind, bill, customRequest, activeTab = 'conversation') {
   const title = (kind === 'tickets' ? '工单' : caseTypes[kind].label) + '详情';
   if (!ticket) return managementDetail(title, `<p class="empty">${emptyMessage}</p>`);
   const rows = [
@@ -1590,6 +1598,8 @@ export function ticketDetail(ticket, order, emptyMessage, kind, bill, customRequ
     ...(kind === 'claims' && order ? [['承运商', e(carrierName(order.rate))]] : []),
     ...(ticket.requestedAmount ? [['申请金额', money(ticket.requestedAmount)]] : [])
   ];
+  const files = ticket.messages.flatMap(message => message.files ?? []);
+  const attachments = `<section class="detail-block"><h3 class="subhead">相关附件</h3>${files.length ? `<ul class="order-files">${files.map(file => `<li><span class="order-file-name">${icon('file')}<span>${e(file.name)}</span></span><button class="link" type="button" data-action="download-evidence" data-id="${e(file.id)}" data-name="${e(file.name)}">下载</button></li>`).join('')}</ul>` : '<p class="note">暂无附件，可在沟通中补充凭证。</p>'}</section>`;
   const information = `<div class="detail-body ticket-information">
     <section class="detail-block ticket-context">
       <div><h3 class="subhead">${e(ticket.subject)}</h3><p class="note">${e(ticket.customChange ? '定制询价修改' : caseCategory(ticket))}</p></div>
@@ -1599,14 +1609,18 @@ export function ticketDetail(ticket, order, emptyMessage, kind, bill, customRequ
     ${rows.length ? `<section class="detail-block">${detailList(rows)}</section>` : ''}
     ${ticket.customChange ? `<section class="detail-block custom-change-review"><h3 class="subhead">${({ approved: '已审核通过', rejected: '未通过审核' })[ticket.resolution] ?? (ticket.status === 'closed' ? '已撤回修改' : '待审核修改')}</h3><p class="note">基于资料版本 V${ticket.customChange.revision} 提交</p>${customChangeComparison(ticket.customChange)}<details><summary>查看本次提交的完整资料</summary>${customRequestSnapshot(ticket.customChange.after)}</details><details><summary>对照原资料</summary>${customRequestSnapshot(ticket.customChange.before)}</details></section>` : ''}
     ${ticket.orderChange ? `<section class="detail-block"><h3 class="subhead">申请内容</h3>${orderChangeDiff(ticket.orderChange, ticket.status === 'closed')}</section>` : ''}
+    ${attachments}
   </div>`;
-  return managementDetail(title, information, ticket.id, ticketStatusBadge(ticket));
+  const linked = customRequest ? `<a class="ticket-linked-order" href="#custom/${e(customRequest.id)}"><span><strong>关联询价 ${e(customRequest.id)}</strong><small>${routeLabel(customRequest.shipment ?? customRequest)}</small></span>${icon('chev')}</a>` : order ? `<a class="ticket-linked-order" href="${e(orderRecordHref(orderType(order), order))}"><span><strong>${e(order.id)}</strong><small>${routeLabel(order.shipment)}</small></span>${icon('chev')}</a>` : '';
+  const conversation = `<div class="ticket-inspector-conversation">${linked}${ticketConversationContent(ticket, kind, false)}</div>`;
+  const closeLabel = ticket.orderChange || ticket.customChange ? '撤回申请' : '关闭' + (kind === 'tickets' ? '工单' : kind === 'claims' ? '索赔' : '申诉');
+  const controls = `<div class="order-toolbar inspector-toolbar">${tabList('ticket', '工单详情标签', { conversation: '沟通', details: '申请详情' }, activeTab)}<div class="order-toolbar-actions">${ticket.status !== 'closed' ? `<button class="link" type="button" data-action="close-ticket" data-id="${e(ticket.id)}">${closeLabel}</button>` : ''}</div></div>`;
+  return managementDetail(e(ticket.subject), tabPanels('ticket', { conversation, details: information }, activeTab, 'inspector-tab-body ticket-tab-body'), ticket.id + ' · ' + (ticket.customChange ? '定制询价修改' : caseCategory(ticket)), ticketStatusBadge(ticket), controls);
 }
 
-export function ticketConversationPanel(ticket, collapsed = false, kind = 'tickets') {
-  if (!ticket) return `<aside class="panel ticket-chat-dock ticket-chat-dock-empty"><p class="empty">选择一条记录查看沟通对话</p></aside>`;
+function ticketConversationContent(ticket, kind, includeClose = true) {
   const names = { customer: '你', support: 'HYE Freight 客服', system: '系统' };
-  const conversation = collapsed ? '' : `<div class="ticket-chat-dock-body">
+  const conversation = `<div class="ticket-chat-dock-body">
     <header class="ticket-conversation-head"><div><h3 class="subhead">${e(ticket.subject)}</h3><p class="note">${e(caseCategory(ticket))} · ${ticket.messages.length} 条消息</p></div></header>
     <section class="ticket-chat" aria-label="沟通记录">
       <ol class="ticket-chat-history" aria-label="工单沟通消息" aria-live="polite">${ticket.messages.map(message => {
@@ -1628,9 +1642,15 @@ export function ticketConversationPanel(ticket, collapsed = false, kind = 'ticke
       </div>
       ${kind === 'tickets' ? '' : evidenceField()}
       <p class="error" role="alert" id="ticket-reply-error"></p>
-      <div class="ticket-chat-composer-actions"><button class="link ticket-close" type="button" data-action="close-ticket" data-id="${e(ticket.id)}">${ticket.orderChange || ticket.customChange ? '撤回申请' : '关闭' + (kind === 'tickets' ? '工单' : kind === 'claims' ? '索赔' : '申诉')}</button></div>
+      ${includeClose ? `<div class="ticket-chat-composer-actions"><button class="link ticket-close" type="button" data-action="close-ticket" data-id="${e(ticket.id)}">${ticket.orderChange || ticket.customChange ? '撤回申请' : '关闭' + (kind === 'tickets' ? '工单' : kind === 'claims' ? '索赔' : '申诉')}</button></div>` : ''}
     </form>`}
   </div>`;
+  return conversation;
+}
+
+export function ticketConversationPanel(ticket, collapsed = false, kind = 'tickets') {
+  if (!ticket) return `<aside class="panel ticket-chat-dock ticket-chat-dock-empty"><p class="empty">选择一条记录查看沟通对话</p></aside>`;
+  const conversation = collapsed ? '' : ticketConversationContent(ticket, kind);
   return `<aside class="panel ticket-chat-dock${collapsed ? ' ticket-chat-dock-collapsed' : ''}" aria-label="工单沟通对话">
     <header class="ticket-chat-dock-head">
       ${collapsed ? `<button class="ticket-chat-dock-toggle" type="button" data-action="toggle-ticket-chat" aria-expanded="false" aria-label="展开沟通对话"><span aria-hidden="true">›</span><span class="ticket-chat-dock-toggle-label">沟通对话</span></button>` : `<div><h2 class="panel-title">沟通对话</h2><p class="note">${e(ticket.id)}</p></div><button class="ticket-chat-dock-toggle" type="button" data-action="toggle-ticket-chat" aria-expanded="true" aria-label="收起沟通对话">收起</button>`}
@@ -1638,7 +1658,7 @@ export function ticketConversationPanel(ticket, collapsed = false, kind = 'ticke
   </aside>`;
 }
 
-export function ticketsView(result, filter, selected, order, counts, emptyMessage, kind, bill, customRequest, chatCollapsed = false) {
+export function ticketsView(result, filter, selected, order, counts, emptyMessage, kind, bill, customRequest, activeTab = 'conversation') {
   const { label, action } = caseTypes[kind];
   const search = kind === 'disputes' ? '搜索申诉号、账单号或主题' : '搜索编号、主题或关联记录';
   return managementPage({
@@ -1648,8 +1668,7 @@ export function ticketsView(result, filter, selected, order, counts, emptyMessag
       `<button class="btn primary small" type="button" data-action="${kind === 'tickets' ? 'new-ticket' : 'new-case'}" data-kind="${kind}">${icon('plus')} ${action}</button>`),
     headers: ['主题 / 编号', [kind === 'disputes' ? '关联账单 / 运单' : '关联记录', 'list-table-wide'], ['处理状态', 'list-table-status'], ['最近动态', 'list-table-medium ticket-table-activity']],
     rows: ticketRows(result.rows, selected?.id, kind),
-    sidePanel: ticketConversationPanel(selected, chatCollapsed, kind),
-    detail: ticketDetail(selected, order, emptyMessage, kind, bill, customRequest)
+    detail: ticketDetail(selected, order, emptyMessage, kind, bill, customRequest, activeTab)
   });
 }
 

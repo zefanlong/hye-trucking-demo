@@ -8,21 +8,21 @@ import {
   createTicket, updateTicket, caseTypes, caseKind, caseRoute, caseHref, caseCategory, latestCase, validateCase,
   canClaimOrder, canRequestOrderChange, editableOrderStops, planOrderChange, planOrderCargoChange, planOrderCancellation, submitOrderChange,
   emptyCustomStop, customShipmentStops, customCargoRoute, customCargoIdentities, exampleCustomShipment, customRequestStatus, customChangeTicket, submitCustomRequestChange, simulateCustomResponse, bookCustomRequest
-} from './model.js?v=warp-sandbox-booking-1';
+} from './model.js?v=demo-scenarios-1';
 import {
   quoteView, ratesView, ordersView, billingView, accountView, accountTabs, walletContent, walletRows, walletRechargeForm, walletRechargeConfirmation, dashboardView, campaignDetails, orderRows, billRows, billDetail,
   addressRows, addressForm, icon, e, detailsView, quoteSummary, confirmationView, carrierQuotes, workflowHeader,
   cargoEditor, cargoTotalsText, cargoItemMetrics, serviceSelectionText, compareRates, orderDetail, customQuoteView, customRecordsView, customInquiryNavigation, customRequestSnapshot, customChangeComparison,
   apiKeyForm, apiKeyResult, ticketRows, ticketDetail, ticketsView, ticketForm, caseForm, caseChargeOptions, paginationControls, pageSizes, quoteAssistantForm, quoteAssistantResult,
   orderChangeEditor, orderChangeReview, orderCancellationForm, customRouteSummary, customStopLabel, customStopCargo
-} from './views.js?v=warp-sandbox-booking-2';
+} from './views.js?v=whole-truck-1';
 import { customRequestChanges } from './custom-changes.js?v=account-layout';
 import { renderRouteMap } from './route-map.js?v=zip-suggestions';
 import { orderDocument } from './order-documents.js?v=account-layout';
 import { bindAddressSuggestions } from './address-search.js?v=account-layout';
 import { createSatelliteDrawer } from './satellite-preview.js?v=account-layout';
 import { analyzeQuoteText, applyQuoteText } from './quote-assistant.js?v=account-layout';
-import { saveEvidence, removeEvidence, loadEvidence } from './case-evidence.js?v=zip-suggestions';
+import { saveEvidence, removeEvidence, loadEvidence } from './case-evidence.js?v=demo-scenarios-1';
 import { initializePhoneInputs, setPhoneInputValue, phoneInputValue } from './phone-input.js?v=phone-input-2';
 import { quoteProvider } from './quote-provider.js?v=quote-provider-mode-1';
 
@@ -62,7 +62,7 @@ let activeOrderId;
 let activeOrderTab = 'overview';
 let orderChangeDraft;
 let activeTicketId;
-let activeTicketChatCollapsed = false;
+let activeTicketTab = 'conversation';
 let activeBillId;
 let activeAccountTab = 'profile';
 let walletRechargeDraft;
@@ -260,9 +260,9 @@ function renderTickets(state) {
   }
   const result = paginate(matches, filters[kind], requested);
   const selected = requested ?? result.rows[0];
-  if (selected?.id !== activeTicketId) activeTicketChatCollapsed = false;
+  if (selected?.id !== activeTicketId) activeTicketTab = 'conversation';
   activeTicketId = selected?.id;
-  return ticketsView(result, filters[kind], selected, linkedOrder(orders, selected), counts, ticketEmptyMessage(tickets, kind), kind, linkedBill(orders, selected), state.customRequests?.find(request => request.id === selected?.customRequestId), activeTicketChatCollapsed);
+  return ticketsView(result, filters[kind], selected, linkedOrder(orders, selected), counts, ticketEmptyMessage(tickets, kind), kind, linkedBill(orders, selected), state.customRequests?.find(request => request.id === selected?.customRequestId), activeTicketTab);
 }
 
 function updateTicketFilter(state) {
@@ -273,13 +273,13 @@ function updateTicketFilter(state) {
   updateStatusFilters(filters[kind], counts);
   const result = paginate(matches, filters[kind]);
   const selected = result.rows.find(ticket => ticket.id === activeTicketId) ?? result.rows[0];
-  if (selected?.id !== activeTicketId) activeTicketChatCollapsed = false;
+  if (selected?.id !== activeTicketId) activeTicketTab = 'conversation';
   updateListRows(ticketRows(result.rows, selected?.id, kind));
   updatePagination(kind, result);
   if (selected?.id === activeTicketId) return;
   activeTicketId = selected?.id;
   const detail = workspace.querySelector('.management-detail');
-  detail.innerHTML = ticketDetail(selected, linkedOrder(orders, selected), ticketEmptyMessage(tickets, kind), kind, linkedBill(orders, selected), state.customRequests?.find(request => request.id === selected?.customRequestId));
+  detail.innerHTML = ticketDetail(selected, linkedOrder(orders, selected), ticketEmptyMessage(tickets, kind), kind, linkedBill(orders, selected), state.customRequests?.find(request => request.id === selected?.customRequestId), activeTicketTab);
   if (id) history.replaceState(null, '', selected ? caseHref(selected) : caseRoute(kind));
 }
 
@@ -360,7 +360,7 @@ function revealSelectedRow(tableWrap) {
 }
 
 function openTicket(ticket) {
-  activeTicketChatCollapsed = false;
+  activeTicketTab = 'conversation';
   const route = caseHref(ticket);
   if (location.hash === route) render(true);
   else navigate(route);
@@ -1237,6 +1237,13 @@ const actions = {
     const detail = workspace.querySelector('.management-detail');
     activateTab(detail, tab, detail.querySelector('.management-detail-scroll'));
   },
+  'ticket-tab'({ tab }) {
+    activeTicketTab = tab;
+    const detail = workspace.querySelector('.management-detail');
+    activateTab(detail, tab, detail.querySelector('.management-detail-scroll'));
+    const history = detail.querySelector('#ticket-panel-conversation .ticket-chat-history');
+    if (tab === 'conversation' && history) history.scrollTop = history.scrollHeight;
+  },
   'account-tab'({ tab }) {
     if (!Object.hasOwn(accountTabs, tab)) return;
     activeAccountTab = tab;
@@ -1307,11 +1314,6 @@ const actions = {
     if (filters[kind].status === status) return;
     Object.assign(filters[kind], { status, page: 1 });
     updateListFilters(kind);
-  },
-  'toggle-ticket-chat'() {
-    activeTicketChatCollapsed = !activeTicketChatCollapsed;
-    render();
-    workspace.querySelector('[data-action="toggle-ticket-chat"]')?.focus({ preventScroll: true });
   },
   'view-campaign'({ id }) {
     const campaign = campaignDetails(id);

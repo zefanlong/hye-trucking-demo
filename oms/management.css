@@ -1,0 +1,155 @@
+/* Fixed inspector workspace: shared by orders, cases and billing. */
+.page:has(> .management-inspector-layout) { display: block; overflow: hidden; padding: 12px 6px 12px 12px; }
+.management-inspector-layout { height: 100%; min-height: 0; align-items: stretch; grid-template-columns: minmax(0, 1fr) clamp(340px, 30%, 480px); gap: 12px; --pagination-height: 48px; }
+.management-primary { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; overflow: hidden; border-radius: 6px; }
+.management-primary .management-tools { min-width: 0; margin: 0; }
+.management-primary .management-tabs-bar { min-height: 44px; padding-inline: 14px; border-radius: 0; }
+.management-primary .management-tabs a { padding: 11px 10px 9px; font-size: 13px; }
+.management-primary .management-toolbar { padding: 12px 14px; gap: 8px 12px; }
+.management-primary .management-status-tabs { gap: 6px; }
+.management-primary .management-status-tabs button { min-height: 32px; padding: 4px 9px; background: #f8fafd; font-weight: 400; }
+.management-primary .management-status-tabs button[aria-pressed="true"] { background: #e9f2ff; font-weight: 500; }
+.management-primary .management-search { flex-basis: 240px; }
+.management-primary .management-search > .with-icon { max-width: 310px; }
+.management-primary .management-search .text-input { height: 34px; min-height: 34px; font-size: 12px; }
+.management-primary .management-list { display: flex; flex-direction: column; min-height: 0; max-height: none; overflow: hidden; }
+.management-primary .table-wrap { height: 100%; min-height: 0; border-radius: 0; overscroll-behavior: contain; }
+.management-primary table { table-layout: fixed; font-size: 13px; }
+.management-primary th { position: sticky; top: 0; z-index: 1; padding: 11px 16px; background: #f3f6f9; font-size: 12px; font-weight: 500; }
+.management-primary td { padding: 12px 16px; font-weight: 400; }
+.management-primary td small { font-size: 11px; line-height: 1.5; }
+.management-primary .management-record { font-weight: 500; }
+.management-primary .table-row-selected td { background: #eaf2ff; }
+.management-primary .table-row-selected > td:first-child { box-shadow: inset 2px 0 var(--blue); }
+.management-primary .list-table-status { width: 90px; }
+.management-primary .list-table-time { width: 155px; }
+.management-primary .list-table-wide { width: 22%; }
+.management-primary .ticket-table-activity { width: 27%; }
+.management-inspector-layout:is([data-management-page="ltl"], [data-management-page="ftl"], [data-management-page="custom"]) .management-list th:nth-child(1) { width: 20%; }
+.management-inspector-layout:is([data-management-page="ltl"], [data-management-page="ftl"], [data-management-page="custom"]) .management-list th:nth-child(2) { width: 33%; }
+.management-inspector-layout:is([data-management-page="ltl"], [data-management-page="ftl"], [data-management-page="custom"]) .management-list th:nth-child(3) { width: 22%; }
+.management-inspector-layout:is([data-management-page="ltl"], [data-management-page="ftl"], [data-management-page="custom"]) .management-list th:nth-child(4) { width: 11%; }
+.management-inspector-layout:is([data-management-page="ltl"], [data-management-page="ftl"], [data-management-page="custom"]) .management-list th:nth-child(5) { width: 14%; }
+.management-primary .status { font-size: 11px; font-weight: 500; }
+.management-primary .status.picked { color: #257242; background: #e5f5e9; }
+.management-inspector-layout .status.pending { color: #805411; background: #fff1d6; }
+.list-route { display: grid; gap: 4px; }
+.list-route-destination { display: flex; align-items: start; gap: 5px; }
+.list-route-destination .icon { width: 12px; height: 12px; flex: none; margin-top: 3px; color: #7c8da2; rotate: 90deg; }
+.management-primary .list-pagination { position: static; z-index: 1; flex: none; min-width: 0; border-top: 1px solid var(--border); }
+.management-primary .pagination-inner { min-height: 47px; padding: 7px 14px; font-size: 11px; gap: 8px; }
+.management-primary .pagination-inner > .note { font-size: 11px; }
+.management-primary .page-size select, .management-primary .page-links button { min-height: 30px; font-size: 11px; }
+.management-primary .billing-summary { padding: 2px 0; }
+.management-primary .billing-metric { flex-wrap: wrap; white-space: normal; }
+.management-primary .billing-metric strong { font-size: 13px; }
+.management-primary .billing-collection-rule { padding: 0 14px 10px; font-size: 10px; line-height: 1.6; }
+.management-inspector-layout > .management-detail { height: 100%; max-height: 100%; align-self: stretch; border-radius: 6px; }
+.management-inspector-layout .management-detail-head { border-radius: 6px 6px 0 0; }
+.management-inspector-layout .management-detail-head > .panel-head { flex-wrap: nowrap; align-items: start; padding: 17px 18px 10px; }
+.management-inspector-layout .management-detail-head > .panel-head > div:first-child,
+.management-inspector-layout .management-detail-head:has(> .order-toolbar) > .panel-head > div:first-child { display: block; min-width: 0; flex: 1; }
+.management-inspector-layout .management-detail-head .panel-title { font-size: 17px; line-height: 1.45; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.management-inspector-layout #detail-title:focus-visible { outline: 1px solid #b3c9ed; outline-offset: 3px; border-radius: 2px; }
+.management-inspector-layout .management-detail-head .note { display: block; margin-top: 3px; font-size: 11px; color: #65758a; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.management-inspector-layout .management-detail-actions { flex: none; padding-top: 2px; }
+.management-inspector-layout .management-detail-actions .status { font-size: 11px; font-weight: 500; }
+.management-inspector-layout .order-toolbar { container: inspector-toolbar / inline-size; min-height: 39px; padding-inline: 14px; gap: 6px; }
+.management-inspector-layout .inspector-section-label { margin: 0; padding: 7px 5px; font-size: 12px; font-weight: 500; color: var(--ink); }
+.management-inspector-layout .order-toolbar .tab-list { min-width: 0; gap: 4px; }
+.management-inspector-layout .order-toolbar .tab-list button { min-height: 38px; padding: 7px 5px; font-size: 12px; font-weight: 400; }
+.management-inspector-layout .order-toolbar .tab-list button[aria-selected="true"] { font-weight: 500; }
+.management-inspector-layout .order-toolbar-actions { flex: none; gap: 5px; }
+.management-inspector-layout .order-toolbar-actions :is(.btn, .link) { min-height: 28px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 4px; background: white; font-size: 11px; font-weight: 400; color: #34485f; }
+.management-inspector-layout .order-toolbar-actions :is(.btn, .link):hover { background: #f2f6ff; border-color: #8baee9; text-decoration: none; }
+.management-inspector-layout .order-toolbar-actions .order-cancel-action { color: #ae3530; border-color: #efcccc; }
+.management-inspector-layout .order-action-full { display: none; }
+.management-inspector-layout .order-action-short { display: inline; }
+.management-inspector-layout .detail-body { padding: 18px; gap: 16px; font-size: 12px; }
+.management-inspector-layout .subhead { font-size: 13px; font-weight: 500; }
+.management-inspector-layout .management-detail-scroll { scroll-padding-block: 14px; }
+.inspector-overview { gap: 20px; }
+.inspector-shipment { display: grid; gap: 20px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.inspector-carrier { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.inspector-carrier .carrier-identity { min-width: 0; flex: none; max-width: 52%; }
+.inspector-carrier .carrier-identity img { width: 60px; height: 30px; }
+.inspector-carrier .carrier-identity:has(img) > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.inspector-carrier .carrier-identity strong { font-size: 12px; font-weight: 500; }
+.inspector-pro { display: flex; align-items: baseline; gap: 7px; padding-left: 14px; border-left: 1px solid var(--border); }
+.inspector-pro .note { font-size: 10px; }
+.inspector-pro .order-pro-number { font-size: 12px; font-weight: 500; }
+.inspector-route { display: grid; gap: 15px; }
+.inspector-route .order-overview-stop { gap: 10px; }
+.inspector-route .overview-pin { width: 22px; height: 22px; font-size: 11px; }
+.inspector-route .order-overview-stop .note { font-size: 11px; margin-bottom: 3px; }
+.inspector-route .order-overview-stop strong { font-weight: 500; font-size: 13px; }
+.inspector-latest { padding: 13px 14px; background: #edf4ff; border-radius: 4px; }
+.inspector-latest > p { margin-top: 7px; font-size: 13px; line-height: 1.6; }
+.inspector-latest dl { display: grid; gap: 6px; margin-top: 8px; color: #1454c2; font-size: 12px; }
+.inspector-latest dl > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.inspector-latest dl small { display: block; font-size: 10px; color: #55749b; }
+.inspector-tracking { gap: 16px; }
+.inspector-progress { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0; }
+.inspector-progress li { display: grid; grid-template-columns: 17px minmax(0, 1fr); justify-items: start; align-items: start; gap: 10px; text-align: left; padding: 0 0 19px; font-size: 12px; }
+.inspector-progress li:last-child { padding-bottom: 0; }
+.inspector-progress li:not(:first-child)::before { display: none; }
+.inspector-progress li:not(:last-child)::after { content: ''; position: absolute; left: 6px; top: 14px; bottom: 0; width: 1px; background: #d9e2ed; }
+.inspector-progress .order-progress-dot { display: grid; place-items: center; width: 14px; height: 14px; margin-top: 2px; font-size: 9px; line-height: 1; }
+.inspector-progress .done:not([aria-current]) .order-progress-dot { border-color: #27904b; background: white; color: #27904b; }
+.inspector-progress li strong { font-size: 12px; font-weight: 500; }
+.inspector-progress li small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; font-weight: 400; }
+.inspector-cargo { display: flex; flex-wrap: wrap; gap: 12px; padding-top: 15px; border-top: 1px solid var(--border); font-size: 12px; }
+.inspector-cargo > span { color: var(--muted); }
+.inspector-tab-body { min-width: 0; }
+.bill-tab-body .bill-detail-amount { padding: 0 0 14px; border-left: 0; border-bottom: 1px solid var(--border); text-align: left; gap: 5px; }
+.bill-tab-body .bill-detail-amount dd { font-size: 25px; }
+.ticket-inspector-conversation { height: 100%; display: flex; flex-direction: column; min-height: 0; padding: 14px; gap: 12px; }
+.ticket-inspector-conversation > .ticket-linked-order { flex: none; padding: 9px 10px; min-width: 0; font-size: 11px; }
+.ticket-inspector-conversation .ticket-linked-order small { font-size: 10px; }
+.ticket-inspector-conversation .ticket-chat-dock-body { padding: 0; gap: 12px; min-height: 0; flex: 1; grid-template-rows: minmax(0, 1fr) auto; }
+.ticket-inspector-conversation .ticket-conversation-head { display: none; }
+.ticket-inspector-conversation .ticket-chat { min-height: 0; overflow: hidden; }
+.ticket-inspector-conversation .ticket-chat-history { height: 100%; max-height: none; min-height: 0; border: 0; padding: 8px 0; background: white; }
+.ticket-inspector-conversation .ticket-chat-bubble { max-width: 92%; box-shadow: none; font-size: 12px; }
+.ticket-inspector-conversation .ticket-chat-row-support .ticket-chat-bubble { background: #f4f7fb; }
+.ticket-inspector-conversation .ticket-chat-composer { position: static; margin: 0; padding: 8px 0 0; background: white; border-top: 1px solid var(--border); }
+.ticket-inspector-conversation .ticket-chat-input { box-shadow: none; border-radius: 6px; padding: 5px; }
+.ticket-inspector-conversation .ticket-chat-send { min-height: 32px; padding: 5px 8px; font-size: 12px; border-radius: 4px; }
+.ticket-inspector-conversation .field { font-size: 11px; }
+.ticket-tab-body:has(.ticket-inspector-conversation) { height: 100%; }
+.management-detail-scroll:has(> .ticket-tab-body:not([hidden]) .ticket-inspector-conversation) { overflow: hidden; }
+@media (max-width: 1400px) and (min-width: 1081px) {
+  .management-primary .management-toolbar { flex-wrap: wrap; }
+  .management-primary .management-search { flex-basis: 100%; }
+  .management-primary .management-search > .with-icon { max-width: none; }
+  .management-inspector-layout .order-toolbar { padding-inline: 9px; gap: 3px; }
+  .management-inspector-layout .order-toolbar .tab-list { gap: 0; }
+  .management-inspector-layout .order-toolbar .tab-list button { padding-inline: 3px; font-size: 11px; }
+  .management-inspector-layout .order-toolbar-actions { gap: 3px; }
+  .management-inspector-layout .order-toolbar-actions :is(.btn, .link) { padding-inline: 4px; font-size: 10px; }
+  .inspector-carrier { align-items: start; gap: 10px; }
+  .inspector-carrier .carrier-identity img { width: 42px; }
+  .inspector-pro { flex-direction: column; gap: 3px; padding-left: 9px; }
+  .management-primary .list-table-time { width: 120px; }
+}
+@media (max-width: 1080px) {
+  .page:has(> .management-inspector-layout) { overflow: auto; padding: 12px; }
+  .management-inspector-layout { height: auto; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .management-primary { height: min(650px, 70dvh); min-height: 330px; }
+  .management-inspector-layout > .management-detail { height: max(540px, calc(100dvh - 85px)); max-height: none; }
+  .management-primary .management-toolbar { flex-wrap: wrap; }
+  .management-primary .management-search { flex-basis: 100%; }
+  .management-primary .management-search > .with-icon { max-width: none; }
+}
+@media (max-width: 470px) {
+  .management-primary th, .management-primary td { padding-inline: 9px; }
+  .management-primary .pagination-inner { flex-wrap: wrap; }
+  .management-primary .pagination-inner > .note { flex-basis: 100%; }
+  .management-primary .page-links { margin-left: auto; }
+  .management-inspector-layout .order-toolbar { flex-wrap: wrap; padding-inline: 10px; }
+  .management-inspector-layout .order-toolbar-actions { margin-left: auto; }
+  .management-inspector-layout .order-toolbar-actions :is(.btn, .link) { font-size: 10px; padding-inline: 5px; }
+  .management-inspector-layout .detail-body { padding: 14px; }
+  .inspector-carrier { flex-wrap: wrap; gap: 9px; }
+  .ticket-inspector-conversation { padding: 12px; }
+}

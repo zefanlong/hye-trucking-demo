@@ -1,4 +1,4 @@
-import { displayAddress, hasStreetAddress, postalCode } from './model.js?v=account-layout';
+import { displayAddress, hasStreetAddress, postalCode } from './model.js?v=demo-scenarios-1';
 import { locateStreetAddress } from './address-search.js?v=account-layout';
 import { loadZipPoints } from './route-map.js?v=zip-suggestions';
 

@@ -1,8 +1,8 @@
 import {
   billStatusText, billAmountLabel, rebillCollectionRule, rebillCountdownText, rebillMethodText, carrierProfiles, displayAddress, billingRecords, itemCommodities, money, orderDocuments,
   packaging, selectedServices, stopSupplement, totals, customShipmentStops, customCargoRoute
-} from './model.js?v=account-layout';
-import { e } from './views.js?v=account-layout';
+} from './model.js?v=demo-scenarios-1';
+import { e } from './views.js?v=whole-truck-1';
 
 function stop(order, side, title, includeContact = true) {
   const details = order.details ?? {};

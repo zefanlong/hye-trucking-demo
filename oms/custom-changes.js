@@ -1,4 +1,4 @@
-import { customShipmentStops, customCargoRoute, customCargoIdentities, addressTypes, packaging, serviceOptions, unitSettings, displayMeasurement, hazardClasses, packingGroups } from './model.js?v=account-layout';
+import { customShipmentStops, customCargoRoute, customCargoIdentities, addressTypes, packaging, serviceOptions, unitSettings, displayMeasurement, hazardClasses, packingGroups } from './model.js?v=demo-scenarios-1';
 
 const sides = ['origin', 'destination'];
 const regulated = { hazmat: '危险品', alcohol: '酒类', tobacco: '烟草／尼古丁' };

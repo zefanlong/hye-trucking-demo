@@ -1,0 +1,31 @@
+{
+  "retrievedOn": "2026-11-25",
+  "source": "https://zefanlong.space/tool/pallet/",
+  "files": {
+    "shared/truck-loading.js": {
+      "url": "https://zefanlong.space/tool/shared/truck-loading.js",
+      "sha256": "15bb08b980e6d87077b81e0e758ca1a517984a73fe1fc45d5a56fffab6b43375",
+      "bytes": 16306
+    },
+    "shared/pallet-calculator.js": {
+      "url": "https://zefanlong.space/tool/shared/pallet-calculator.js",
+      "sha256": "e005a34a39f8c34e52e8136f94e1995bc096022c066735d21469423d9eb3ae17",
+      "bytes": 14651
+    },
+    "vendor/binpackingjs/2d/index.js": {
+      "url": "https://zefanlong.space/tool/vendor/binpackingjs/2d/index.js",
+      "sha256": "d356eb68a89da056cebd7d278b6ab667606abfcc0828c2868424aad15ca445de",
+      "bytes": 387
+    },
+    "vendor/binpackingjs/index-tbt0352g.js": {
+      "url": "https://zefanlong.space/tool/vendor/binpackingjs/index-tbt0352g.js",
+      "sha256": "d56d0d7a20898d67feb822c0621eb5207b3eeac4fd380a2aead4670c14c3e33e",
+      "bytes": 10370
+    },
+    "vendor/binpackingjs/index-fs4vjjqp.js": {
+      "url": "https://zefanlong.space/tool/vendor/binpackingjs/index-fs4vjjqp.js",
+      "sha256": "2a1b40260ae352e85070b1d7a97e7befa31d6954b188922990d30553848d1b93",
+      "bytes": 1221
+    }
+  }
+}

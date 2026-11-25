@@ -1,4 +1,4 @@
-import { addressValue, dateInZone, emptyItem, postalCode, serviceOptions, unitSettings } from './model.js?v=account-layout';
+import { addressValue, dateInZone, emptyItem, postalCode, serviceOptions, unitSettings } from './model.js?v=demo-scenarios-1';
 
 const sides = ['origin', 'destination'];
 const number = '(\\d+(?:[,.]\\d+)*)';

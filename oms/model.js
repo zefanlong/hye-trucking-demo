@@ -1,3 +1,5 @@
+import { demoScenarios, demoScenarioVersion } from './demo-records.js?v=demo-scenarios-1';
+
 const liftgateHelp = '现场没有装卸平台或叉车，需要用车尾升降平台在地面和车厢之间装卸货物。';
 const limitedAccessHelp = '车辆进出受限或需要登记通行，例如工地、学校和军事基地。';
 
@@ -663,6 +665,28 @@ function seed() {
 
 let memory = seed();
 
+function ensureDemoScenarios(state) {
+  if (state.demoScenarioVersion === demoScenarioVersion) return state;
+  const samples = demoScenarios({ exampleShipment, exampleCustomShipment, priceQuote, day: offset => dateInZone(defaultZone, offset) });
+  const orderIds = new Set(state.orders.map(order => order.id));
+  const ticketIds = new Set((state.tickets ?? []).map(ticket => ticket.id));
+  const addedOrders = samples.orders.filter(order => !orderIds.has(order.id));
+  const orders = [...state.orders, ...addedOrders];
+  const tickets = [...(state.tickets ?? []), ...samples.tickets.filter(ticket => !ticketIds.has(ticket.id))];
+  const wallet = walletConfig(state);
+  // Pair the sample invoices with a labelled demo credit, preserving the customer's
+  // existing balance and prior top-ups instead of silently spending their demo funds.
+  const sampleDebit = billingRecords(addedOrders, dateInZone(), tickets)
+    .filter(bill => ['charged', 'collected'].includes(bill.paymentStatus)).reduce((sum, bill) => sum + bill.total, 0);
+  const funding = sampleDebit ? [{ id: 'TOPUP-DEMO-SCENARIOS-1', token: 'demo-scenarios-funding-1',
+    amount: sampleDebit, date: dateInZone(defaultZone, -8), createdAt: Date.parse(dateInZone(defaultZone, -8) + 'T14:00:00Z'),
+    note: '新增样例订单配套演示资金（与样例扣款配平）', simulated: true }] : [];
+  const next = { ...state, orders, tickets, demoScenarioVersion,
+    wallet: { ...wallet, topups: [...(wallet.topups ?? []), ...funding] } };
+  persist(next);
+  return next;
+}
+
 export function currentState() {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey));
@@ -674,6 +698,7 @@ export function currentState() {
   } catch {
     // The current session stays usable if the browser denies local storage.
   }
+  memory = ensureDemoScenarios(memory);
   return memory;
 }
 

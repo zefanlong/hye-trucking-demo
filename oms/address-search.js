@@ -1,4 +1,4 @@
-import { addressValue, postalCode } from './model.js?v=account-layout';
+import { addressValue, postalCode } from './model.js?v=demo-scenarios-1';
 
 const endpoint = 'https://photon.komoot.io/api/';
 const resultLimit = 6;

@@ -1,3 +1,5 @@
+import { demoEvidenceBlob } from './demo-evidence.js?v=demo-scenarios-1';
+
 const allowedTypes = new Set(['image/jpeg', 'image/png', 'application/pdf']);
 
 function evidenceDatabase() {
@@ -42,5 +44,7 @@ export function removeEvidence(records) {
 }
 
 export function loadEvidence(id) {
+  const sample = demoEvidenceBlob(id);
+  if (sample) return Promise.resolve(sample);
   return evidenceTransaction('readonly', store => store.get(id));
 }

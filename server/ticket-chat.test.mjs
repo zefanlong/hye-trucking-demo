@@ -37,18 +37,22 @@ test('closed ticket keeps the conversation and hides the reply composer', async 
   assert.doesNotMatch(html, /ticket-chat-composer/);
 });
 
-test('ticket information tab isolates work order details from the conversation', async () => {
+test('ticket inspector keeps conversation and application details in separate accessible tabs', async () => {
   globalThis.document = { addEventListener() {} };
   const { ticketDetail } = await import('../oms/views.js').finally(() => { delete globalThis.document; });
   const html = ticketDetail({
     id: 'TK-TEST-3', subject: '确认预计送达时间', category: 'tracking', status: 'pending',
-    messages: [{ by: 'customer', text: '请确认日期', at: Date.parse('2026-11-24T16:00:00Z') }]
-  }, { id: 'HYE-DEMO-103', shipment: { origin: 'Los Angeles', destination: 'Chicago' } }, '', 'tickets', null, null);
+    messages: [{ by: 'customer', text: '请确认日期', at: Date.parse('2026-11-24T16:00:00Z'), files: [{ id: 'FILE-TEST-1', name: '提货凭证.pdf' }] }]
+  }, { id: 'HYE-DEMO-103', shipment: { origin: 'Los Angeles', destination: 'Chicago' } }, '', 'tickets', null, null, 'details');
 
   assert.match(html, /确认预计送达时间/);
   assert.match(html, /HYE-DEMO-103/);
-  assert.doesNotMatch(html, /ticket-chat-history/);
-  assert.doesNotMatch(html, /ticket-reply-form/);
+  assert.match(html, /id="ticket-tab-details" role="tab" aria-selected="true"/);
+  assert.match(html, /id="ticket-panel-conversation"[^>]* hidden/);
+  assert.doesNotMatch(html, /id="ticket-panel-details"[^>]* hidden/);
+  assert.doesNotMatch(html, /id="ticket-(?:tab|panel)-files"/);
+  assert.match(html.slice(html.indexOf('id="ticket-panel-details"')), /相关附件[\s\S]*data-action="download-evidence" data-id="FILE-TEST-1"/);
+  assert.equal((html.match(/id="ticket-reply-form"/g) ?? []).length, 1);
 });
 
 test('the conversation panel collapses while keeping a control to reopen it', async () => {
