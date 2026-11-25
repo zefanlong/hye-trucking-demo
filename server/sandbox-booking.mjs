@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { chmodSync } from 'node:fs';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { toWarpRequest, toWarpMarketRequest } from '../oms/warp-api.js';
+import { stopTimeZone } from './stop-time-zone.mjs';
 
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = (message, status = 400, code = 'SANDBOX_VALIDATION') => Object.assign(new Error(message), { status, code });
@@ -16,24 +17,30 @@ function parseAddress(value, unit = '') {
 function zonedTime(date, time, zone) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '') || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time ?? '')) throw fail('请填写有效的日期和时间窗口。');
   const target = Date.parse(date + 'T' + time + ':00Z');
-  let instant = target;
+  if (!Number.isFinite(target) || new Date(target).toISOString().slice(0, 10) !== date) throw fail('请填写有效的日期和时间窗口。');
   const format = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
-  for (let i = 0; i < 3; i++) {
-    const p = Object.fromEntries(format.formatToParts(instant).map(p => [p.type, p.value]));
-    const observed = Date.parse(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}Z`);
-    instant += target - observed;
+  function localAsUtc(instant) {
+    const parts = Object.fromEntries(format.formatToParts(instant).map(({ type, value }) => [type, value]));
+    return Date.parse(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}Z`);
   }
-  const p = Object.fromEntries(format.formatToParts(instant).map(p => [p.type, p.value]));
-  if (`${p.year}-${p.month}-${p.day}` !== date || `${p.hour}:${p.minute}` !== time) throw fail('所选当地时间无效，请调整时间窗口。');
-  return new Date(instant).toISOString();
+  const day = 24 * 60 * 60 * 1000;
+  const matches = new Set();
+  // Test the offsets on both sides of a clock change so skipped or repeated local times cannot be guessed.
+  for (const sample of [target - day, target, target + day]) {
+    const instant = target + (sample - localAsUtc(sample));
+    if (localAsUtc(instant) === target) matches.add(instant);
+  }
+  if (matches.size !== 1) throw fail('所填当地时间遇到夏令时切换，请调整时间窗口。');
+  return new Date(matches.values().next().value).toISOString();
 }
 function stopFor(side, shipment, details, zip, services, market) {
   const address = parseAddress(shipment[side], details[side + 'Unit']);
   if (address.zipcode !== zip) throw fail('地址邮编与服务端报价不一致，请重新询价。');
   for (const field of ['Company', 'Contact', 'Phone', 'Email']) if (typeof details[side + field] !== 'string' || !details[side + field].trim()) throw fail('请补齐提送货公司、联系人、电话和邮箱。');
   if (!/^\+?[\d\s().-]{7,30}$/.test(details[side + 'Phone']) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(details[side + 'Email'])) throw fail('请检查联系电话和邮箱格式。');
-  const zone = details[side + 'Timezone'];
-  if (!['America/Los_Angeles', 'America/Denver', 'America/Chicago', 'America/New_York'].includes(zone)) throw fail('请选择两个地点各自的当地时区。');
+  const zone = stopTimeZone(address);
+  const stopLabel = side === 'origin' ? '提货' : '送货';
+  if (!zone) throw fail(`请核对${stopLabel}地点的地址和 ZIP，系统无法确定当地时间。`);
   const date = side === 'origin' ? shipment.pickupDate : details.destinationDate;
   const from = zonedTime(date, side === 'origin' ? shipment.pickupTime : details.destinationOpensAt, zone);
   const to = zonedTime(date, side === 'origin' ? details.pickupEnd : details.destinationClosesAt, zone);

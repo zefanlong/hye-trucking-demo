@@ -190,7 +190,7 @@ function sideFields(shipment, side, details = null, complete = false) {
       <section class="stop-section" aria-labelledby="${side}-time-heading">
         <h3 id="${side}-time-heading">时间安排</h3>
         ${stopHoursFields(details, side)}
-        ${details.sandboxCheckout ? selectField('地点时区（沙盒下单）', side + 'Timezone', { '': '请选择实际当地时区', ...zones }, details[side + 'Timezone'] || '', true) + (!pickup ? field({ label: '送货日期（当地）', name: 'destinationDate', type: 'date', value: details.destinationDate || '', required: true }) : '') : ''}
+        ${details.sandboxCheckout && !pickup ? field({ label: '送货日期（当地）', name: 'destinationDate', type: 'date', value: details.destinationDate || '', required: true }) : ''}
         ${pickup ? pickupTimeFields(shipment, details) : ''}
       </section>
       <section class="stop-section" aria-labelledby="${side}-handoff-heading">
@@ -796,7 +796,7 @@ export function quoteSummary(quote, message = '', review = false) {
       ${rateActions(quote, review)}
     </div>
     ${rate?.provider ? (rate.provider.bookingHandle
-      ? (review ? `<p class="notice">仅提交 WARP 测试环境订单。供应商可能返回待付款；OMS 独立测试账本仅在非待付款订单上记账，HYE 客户余额不变。</p><button class="btn primary" type="button" data-action="confirm-booking" data-quote="${e(quote.id)}"${state === 'valid' ? '' : ' disabled'}>确认沙盒下单及测试结算 ${money(rate.total)}</button>` : '<p class="note">已启用 WARP 沙盒下单；请补全联系人、实际时区和未来时间窗口。</p>' + quickRates(quote, state) + '<button class="btn primary" type="submit" form="details-form">核对沙盒订单</button>')
+      ? (review ? `<p class="notice">仅提交 WARP 测试环境订单。供应商可能返回待付款；OMS 独立测试账本仅在非待付款订单上记账，HYE 客户余额不变。</p><button class="btn primary" type="button" data-action="confirm-booking" data-quote="${e(quote.id)}"${state === 'valid' ? '' : ' disabled'}>确认沙盒下单及测试结算 ${money(rate.total)}</button>` : '<p class="note">已启用 WARP 沙盒下单，请补全联系人和当地时间窗口。</p>' + quickRates(quote, state) + '<button class="btn primary" type="submit" form="details-form">核对沙盒订单</button>')
       : '<p class="notice">请更新报价以建立服务端沙盒订单快照。线上正式下单仍未开放。</p><button class="btn primary" type="button" disabled>更新报价后可沙盒下单</button>') : review
       ? `<p class="note">确认下单时按所选报价扣款。本页面仅模拟扣款。</p><button class="btn primary" type="button" data-action="confirm-booking" data-quote="${e(quote.id)}"${state === 'valid' ? '' : ' disabled'}>确认下单并扣款</button>`
       : quickRates(quote, state) + '<button class="btn primary" type="submit" form="details-form">核对订单</button>'}`;
@@ -969,7 +969,6 @@ function shipmentStopCard(shipment, details, side, scope) {
   const company = details[side + 'Company'];
   const date = pickup ? shipment.pickupDate : shipment.deliveryDate;
   const schedule = scope === 'custom' ? [['期望日期（当地）', e(date)]] : pickup ? [['提货窗口', pickupWindowText(shipment, details)]] : details.destinationDate ? [['送货日期（当地）', e(details.destinationDate)]] : [];
-  if (details[side + 'Timezone']) schedule.push(['地点时区', e(zones[details[side + 'Timezone']] || details[side + 'Timezone'])]);
   return `<section class="panel review-stop" aria-labelledby="${heading}">
     <header class="review-stop-heading"><span class="overview-pin${pickup ? '' : ' destination'}" aria-hidden="true">${pickup ? 'A' : 'B'}</span><h3 class="subhead" id="${heading}">${label}信息</h3></header>
     <div class="review-stop-body">

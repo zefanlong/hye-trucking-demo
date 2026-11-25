@@ -4,6 +4,7 @@ import { SandboxCheckout } from './sandbox-booking.mjs';
 import { fileURLToPath } from 'node:url';
 import { resolve, extname, sep } from 'node:path';
 import { handleRequest } from './gateway.mjs';
+import { localQuoteConfig } from '../oms/quote-provider.js';
 
 const root = resolve(fileURLToPath(new URL('../', import.meta.url)));
 const port = Number(process.env.PORT || 8787);
@@ -56,6 +57,12 @@ const server = createServer(async (req, res) => {
     const pathname = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname.endsWith('/') ? url.pathname + 'index.html' : url.pathname);
     // Serve only the public app. Environment/configuration/contracts/server files stay private.
     if ((!/^\/(oms|assets)\//.test(pathname) && pathname !== '/index.html') || pathname.split('/').some(part => part.startsWith('.'))) { res.writeHead(404).end(); return; }
+    if (pathname === '/oms/warp-config.js') {
+      const config = localQuoteConfig(Boolean(checkout), Boolean(process.env.WARP_V2_SANDBOX_KEY));
+      res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+      res.end(`globalThis.HYE_WARP_CONFIG = Object.freeze(${JSON.stringify(config)});`);
+      return;
+    }
     const file = resolve(root, '.' + pathname);
     if (!file.startsWith(root + sep) || !['.html', '.js', '.css', '.png', '.svg', '.jpg', '.json', '.csv', '.tsv', '.woff2'].includes(extname(file))) { res.writeHead(404).end(); return; }
     const body = await readFile(file);

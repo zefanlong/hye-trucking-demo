@@ -1,3 +1,3 @@
-// Public configuration only. Set to your deployed quote gateway origin for GitHub Pages.
-// Never put WARP keys here. Empty means the same-origin local gateway (npm start).
-globalThis.HYE_WARP_CONFIG = Object.freeze({ gatewayUrl: '' });
+// GitHub Pages serves the demo quote flow. The local service explicitly enables WARP.
+// Never put WARP keys or a quote gateway URL in this public file.
+globalThis.HYE_WARP_CONFIG = Object.freeze({ gatewayUrl: '', quoteMode: 'demo' });

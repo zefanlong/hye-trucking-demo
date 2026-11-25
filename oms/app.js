@@ -1,6 +1,6 @@
 import { fetchWarpQuote, bookWarpSandbox } from './warp-api.js?v=warp-sandbox-booking-1';
 import {
-  currentState, emptyShipment, exampleShipment, emptyItem, saveWarpQuote, bookOrder, recordSandboxOrder, saveProfile,
+  currentState, emptyShipment, exampleShipment, emptyItem, saveQuote, refreshQuote, saveWarpQuote, bookOrder, recordSandboxOrder, saveProfile,
   saveAddress, removeAddress, postalCode, addressValue, unitSettings, dateInZone, billingRecords, billHref, money, billStatusText, billAmountLabel, rebillMethodText, collectRebillEarly, walletSnapshot, rechargeWallet, walletRechargeAmount, walletKinds,
   displayMeasurement, updateQuote, chooseRate, quoteStatus, pricingReady, detailsReady, hasStreetAddress,
   addressTypes, shortAddress, stopDetailsReady, cargoReady, emptyCommodity, itemCommodities, hazardDeclarationsReady, stopHoursReady,
@@ -15,7 +15,7 @@ import {
   cargoEditor, cargoTotalsText, cargoItemMetrics, serviceSelectionText, compareRates, orderDetail, customQuoteView, customRecordsView, customInquiryNavigation, customRequestSnapshot, customChangeComparison,
   apiKeyForm, apiKeyResult, ticketRows, ticketDetail, ticketsView, ticketForm, caseForm, caseChargeOptions, paginationControls, pageSizes, quoteAssistantForm, quoteAssistantResult,
   orderChangeEditor, orderChangeReview, orderCancellationForm, customRouteSummary, customStopLabel, customStopCargo
-} from './views.js?v=warp-sandbox-booking-1';
+} from './views.js?v=warp-sandbox-booking-2';
 import { customRequestChanges } from './custom-changes.js?v=account-layout';
 import { renderRouteMap } from './route-map.js?v=zip-suggestions';
 import { orderDocument } from './order-documents.js?v=account-layout';
@@ -24,6 +24,7 @@ import { createSatelliteDrawer } from './satellite-preview.js?v=account-layout';
 import { analyzeQuoteText, applyQuoteText } from './quote-assistant.js?v=account-layout';
 import { saveEvidence, removeEvidence, loadEvidence } from './case-evidence.js?v=zip-suggestions';
 import { initializePhoneInputs, setPhoneInputValue, phoneInputValue } from './phone-input.js?v=phone-input-2';
+import { quoteProvider } from './quote-provider.js?v=quote-provider-mode-1';
 
 const workspace = document.querySelector('#workspace');
 const workspaceScrolls = () => getComputedStyle(workspace).overflowY === 'auto';
@@ -42,7 +43,7 @@ const labels = { dashboard: '工作台', quote: '快速查价', rates: '报价�
 const filters = Object.fromEntries([...Object.keys(orderTypes), ...Object.keys(caseTypes), 'bills', 'rebills', 'customRecords', 'wallet'].map(kind => [kind, { query: '', status: '', page: 1, size: 20 }]));
 const rateFiltersByQuote = new Map();
 const stopSides = ['origin', 'destination'];
-const stopFields = ['Company', 'Unit', 'Contact', 'Email', 'Phone', 'PhoneExtension', 'Reference', 'Notes', 'OpensAt', 'ClosesAt', 'Timezone'];
+const stopFields = ['Company', 'Unit', 'Contact', 'Email', 'Phone', 'PhoneExtension', 'Reference', 'Notes', 'OpensAt', 'ClosesAt'];
 const detailFields = [...stopSides.flatMap(side => stopFields.map(field => side + field)), 'pickupEnd', 'destinationDate'];
 
 let draft = emptyShipment();
@@ -928,6 +929,7 @@ function explainIncompletePricing(quote) {
 async function refreshCurrentQuote(id) {
   const previous = findQuote(id);
   if (!previous || !pricingReady(previous.shipment)) return null;
+  if (quoteProvider() === 'demo') return refreshQuote(id);
   const snapshot = structuredClone(previous.shipment);
   let provider = null, providerError = '';
   try { provider = await fetchWarpQuote(snapshot); }
@@ -1091,7 +1093,7 @@ const actions = {
       destinationCompany: 'Midwest Demo Receiving', destinationContact: '演示送货联系人', destinationEmail: 'delivery@example.com', destinationPhone: '+1 312 555 0102',
       originReference: 'PU-DEMO-001', originNotes: '从西侧入口进入，抵达后联系仓库。', originOpensAt: '09:00', originClosesAt: '17:00',
       destinationReference: 'DEL-DEMO-001', destinationNotes: '请到收货窗口登记。', destinationOpensAt: '09:00', destinationClosesAt: '17:00',
-      originTimezone: 'America/Los_Angeles', destinationTimezone: 'America/Chicago', destinationDate: dateInZone('America/Chicago', 10),
+      destinationDate: dateInZone(undefined, 10),
       pickupEnd: '17:00', commodity: '纸箱包装日用品'
     };
     for (const [name, value] of Object.entries(values)) {
@@ -1417,14 +1419,19 @@ async function saveShipment() {
   const snapshot = structuredClone(draft);
   const submit = form.querySelector('[type="submit"]');
   const oldLabel = submit.innerHTML;
-  quoteRequestRunning = true; submit.disabled = true; submit.textContent = '正在获取报价…';
+  quoteRequestRunning = true; submit.disabled = true; submit.textContent = quoteProvider() === 'warp' ? '正在获取报价…' : '正在生成演示报价…';
   let provider = null, providerError = '';
-  try { provider = await fetchWarpQuote(snapshot); }
-  catch (error) { providerError = error.name === 'TimeoutError' ? 'WARP 询价超时，请稍后更新报价。' : error.message; }
-  finally { quoteRequestRunning = false; if (submit.isConnected) { submit.disabled = false; submit.innerHTML = oldLabel; } }
+  if (quoteProvider() === 'warp') {
+    try { provider = await fetchWarpQuote(snapshot); }
+    catch (error) { providerError = error.name === 'TimeoutError' ? 'WARP 询价超时，请稍后更新报价。' : error.message; }
+  }
+  quoteRequestRunning = false;
+  if (submit.isConnected) { submit.disabled = false; submit.innerHTML = oldLabel; }
   if (!form.isConnected) return;
   if (JSON.stringify(readShipment()) !== JSON.stringify(snapshot)) { form.querySelector('#quote-error').textContent = '询价期间资料有变化，请按新资料重新查价。'; return; }
-  const quote = saveWarpQuote(snapshot, provider, draftId, assistantDetails, providerError);
+  const quote = quoteProvider() === 'demo'
+    ? saveQuote(snapshot, draftId, assistantDetails)
+    : saveWarpQuote(snapshot, provider, draftId, assistantDetails, providerError);
   assistantDetails = {};
   quickDrafts.delete(quickDraftKey(shipmentMode(draft), draftId));
   workspace.querySelector('#quote-form').dataset.submitted = 'true';

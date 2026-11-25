@@ -20,7 +20,7 @@ after(() => { simulation?.kill('SIGINT'); rmSync(directory, { recursive: true, f
 const shipment = () => ({ origin: '120 Demo Way, Los Angeles, CA 90001', destination: '85 Sample Drive, Chicago, IL 60601', pickupDate: '2099-11-25', pickupTime: '09:00',
   addressTypes: { origin: 'commercial-dock', destination: 'commercial-dock' }, services: { origin: [], destination: [] },
   items: [{ type: 'pallet', quantity: 1, weight: 500, length: 48, width: 40, height: 48 }] });
-const details = () => ({ originCompany: 'Sandbox pickup', originContact: 'Test', originPhone: '+12135550101', originEmail: 'pickup@example.com', originTimezone: 'America/Los_Angeles', pickupEnd: '17:00', destinationCompany: 'Sandbox delivery', destinationContact: 'Test', destinationPhone: '+13125550102', destinationEmail: 'delivery@example.com', destinationTimezone: 'America/Chicago', destinationDate: '2099-11-30', destinationOpensAt: '09:00', destinationClosesAt: '17:00' });
+const details = () => ({ originCompany: 'Sandbox pickup', originContact: 'Test', originPhone: '+12135550101', originEmail: 'pickup@example.com', pickupEnd: '17:00', destinationCompany: 'Sandbox delivery', destinationContact: 'Test', destinationPhone: '+13125550102', destinationEmail: 'delivery@example.com', destinationDate: '2099-11-30', destinationOpensAt: '09:00', destinationClosesAt: '17:00' });
 function fixture(id = 'MOCK_SUCCESS', { lostResponse = false, mode = 'ltl' } = {}) {
   let writes = 0;
   const path = resolve(directory, crypto.randomUUID() + '.sqlite');
@@ -78,7 +78,7 @@ test('wrong session, tampered amount or freight, missing confirmation and invali
   const f = fixture();
   try {
     await assert.rejects(f.checkout.book(f.checkout.session().id, f.body));
-    for (const update of [{ confirmedAmountCents: 1 }, { confirmSandbox: false }, { shipment: { ...f.body.shipment, items: [{ ...f.body.shipment.items[0], weight: 1 }] } }, { details: { ...details(), originTimezone: '' } }, { details: { ...details(), destinationDate: '2000-01-01' } }]) await assert.rejects(f.checkout.book(f.session, { ...f.body, ...update }));
+    for (const update of [{ confirmedAmountCents: 1 }, { confirmSandbox: false }, { shipment: { ...f.body.shipment, items: [{ ...f.body.shipment.items[0], weight: 1 }] } }, { shipment: { ...f.body.shipment, origin: '120 Demo Way, Los Angeles, NY 90001' } }, { details: { ...details(), destinationDate: '2000-01-01' } }]) await assert.rejects(f.checkout.book(f.session, { ...f.body, ...update }));
     assert.equal(f.writes(), 0); assert.equal(f.checkout.wallet(f.session).debitedCents, 0);
   } finally { f.checkout.close(); }
 });
