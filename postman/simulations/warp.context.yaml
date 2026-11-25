@@ -9,9 +9,9 @@
       "status": "supported",
       "claim": "Gateway V2 uses apikey header, grouped totalWeight, and price.amount/expiration_time_utc response fields.",
       "reason": "Official schema and actual staging response agree for the LTL and FTL requests exercised.",
-      "verification": "2026-11-24: official staging returned HTTP 200 for LTL and FTL; browser rendered LTL response. npm test: 9 checks passed against local Postman simulation. Other lanes/modes/services remain unverified.",
+      "verification": "2026-11-24: official staging returned HTTP 200 for LTL and FTL; browser rendered LTL response. npm test: 9 checks passed against local Postman simulation. Other lanes/modes/services remain unverified. 2026-11-25: after merging the new project into the original directory, all 32 existing tests passed. An additional gateway request through the existing local Postman simulation returned HTTP 200 and two options; the simulation request log confirmed POST /api/v1/freights/freight-quote. This rerun verifies caller behavior against the contract stand-in, not additional real WARP coverage.",
       "source": "contracts/warp-v2.openapi.json; server/gateway.test.mjs; https://developer.wearewarp.com/docs/freight/",
-      "updated_at": "2026-11-24"
+      "updated_at": "2026-11-25"
     },
     {
       "id": "sandbox-equals-production",
@@ -55,6 +55,12 @@
       "id": "initial-implementation",
       "date": "2026-11-24",
       "commit": "c954066ade55c980074f4d5d969efc09fb1d3706 (working tree modified)",
+      "cli": "Postman 1.83.0"
+    },
+    {
+      "id": "original-project-merge-20261125",
+      "date": "2026-11-25",
+      "commit": "67c351e733689946c5fe4c3d5d2d67afe5446f98 + uncommitted ticket conversation UI merged into original project",
       "cli": "Postman 1.83.0"
     }
   ]

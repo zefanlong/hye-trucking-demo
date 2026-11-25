@@ -62,6 +62,7 @@ let activeOrderId;
 let activeOrderTab = 'overview';
 let orderChangeDraft;
 let activeTicketId;
+let activeTicketChatCollapsed = false;
 let activeBillId;
 let activeAccountTab = 'profile';
 let walletRechargeDraft;
@@ -259,8 +260,9 @@ function renderTickets(state) {
   }
   const result = paginate(matches, filters[kind], requested);
   const selected = requested ?? result.rows[0];
+  if (selected?.id !== activeTicketId) activeTicketChatCollapsed = false;
   activeTicketId = selected?.id;
-  return ticketsView(result, filters[kind], selected, linkedOrder(orders, selected), counts, ticketEmptyMessage(tickets, kind), kind, linkedBill(orders, selected), state.customRequests?.find(request => request.id === selected?.customRequestId));
+  return ticketsView(result, filters[kind], selected, linkedOrder(orders, selected), counts, ticketEmptyMessage(tickets, kind), kind, linkedBill(orders, selected), state.customRequests?.find(request => request.id === selected?.customRequestId), activeTicketChatCollapsed);
 }
 
 function updateTicketFilter(state) {
@@ -271,6 +273,7 @@ function updateTicketFilter(state) {
   updateStatusFilters(filters[kind], counts);
   const result = paginate(matches, filters[kind]);
   const selected = result.rows.find(ticket => ticket.id === activeTicketId) ?? result.rows[0];
+  if (selected?.id !== activeTicketId) activeTicketChatCollapsed = false;
   updateListRows(ticketRows(result.rows, selected?.id, kind));
   updatePagination(kind, result);
   if (selected?.id === activeTicketId) return;
@@ -357,6 +360,7 @@ function revealSelectedRow(tableWrap) {
 }
 
 function openTicket(ticket) {
+  activeTicketChatCollapsed = false;
   const route = caseHref(ticket);
   if (location.hash === route) render(true);
   else navigate(route);
@@ -489,6 +493,8 @@ function render(moveFocus = false, message = '') {
   };
   workspace.innerHTML = screens[section]();
   initializePhoneInputs(workspace);
+  const conversationHistory = workspace.querySelector('.ticket-chat-history');
+  if (conversationHistory) conversationHistory.scrollTop = conversationHistory.scrollHeight;
   const customEditor = workspace.querySelector('#custom-quote-form[data-request]');
   if (customEditor) markCustomChanges(customEditor);
   workspace.querySelectorAll('[data-quick-address]').forEach(input => bindAddressSuggestions(input, state.addresses));
@@ -1301,6 +1307,11 @@ const actions = {
     if (filters[kind].status === status) return;
     Object.assign(filters[kind], { status, page: 1 });
     updateListFilters(kind);
+  },
+  'toggle-ticket-chat'() {
+    activeTicketChatCollapsed = !activeTicketChatCollapsed;
+    render();
+    workspace.querySelector('[data-action="toggle-ticket-chat"]')?.focus({ preventScroll: true });
   },
   'view-campaign'({ id }) {
     const campaign = campaignDetails(id);

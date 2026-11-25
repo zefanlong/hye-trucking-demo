@@ -1496,10 +1496,11 @@ function managementDetail(title, body, id, actions = '', tabs = '') {
       ${actions ? `<div class="actions management-detail-actions">${actions}</div>` : ''}</header>${tabs}
   </div><div class="management-detail-scroll"${tabs ? '' : ' tabindex="0" role="region" aria-labelledby="detail-title"'}>${body}</div>`;
 }
-function managementPage({ title, kind, label, tabs = '', toolbar, headers, rows, detail, result }) {
+function managementPage({ title, kind, label, tabs = '', toolbar, headers, rows, detail, result, sidePanel = '' }) {
   return `<h1 class="sr-only" tabindex="-1">${title}</h1>
     <div class="panel management-tools" data-filters="${kind}">${tabs}${toolbar}</div>
-    <div class="management-workspace">
+    <div class="management-workspace${sidePanel ? ' has-side-panel' : ''}">
+      ${sidePanel}
       <div class="panel management-list"><div class="table-wrap" tabindex="0" role="region" aria-label="${label}"><table aria-label="${label}">
         <thead><tr>${headers.map(header => {
           const [name, className] = typeof header === 'string' ? [header] : header;
@@ -1583,14 +1584,13 @@ function evidenceField() {
 export function ticketDetail(ticket, order, emptyMessage, kind, bill, customRequest) {
   const title = (kind === 'tickets' ? '工单' : caseTypes[kind].label) + '详情';
   if (!ticket) return managementDetail(title, `<p class="empty">${emptyMessage}</p>`);
-  const names = { customer: '你', support: 'HYE Freight 客服', system: '系统' };
   const rows = [
     ...(bill ? [['关联账单', `<a class="link" href="${e(billHref(bill))}">${e(bill.id)}</a>`], ['争议费用项', e(ticket.charge === 'all' ? '整张账单' : ticket.charge)]] : []),
     ...(bill?.originalId ? [['原账单', `<a class="link" href="#billing/${e(bill.orderId)}">${e(bill.originalId)}</a>`]] : []),
     ...(kind === 'claims' && order ? [['承运商', e(carrierName(order.rate))]] : []),
     ...(ticket.requestedAmount ? [['申请金额', money(ticket.requestedAmount)]] : [])
   ];
-  const body = `<div class="detail-body">
+  const information = `<div class="detail-body ticket-information">
     <section class="detail-block ticket-context">
       <div><h3 class="subhead">${e(ticket.subject)}</h3><p class="note">${e(ticket.customChange ? '定制询价修改' : caseCategory(ticket))}</p></div>
       ${customRequest ? `<a class="ticket-linked-order" href="#custom/${e(customRequest.id)}">${icon('order')}<span><strong>关联询价 ${e(customRequest.id)}</strong><small>${routeLabel(customRequest.shipment ?? customRequest)}</small></span>${icon('chev')}</a>` : ''}
@@ -1599,23 +1599,46 @@ export function ticketDetail(ticket, order, emptyMessage, kind, bill, customRequ
     ${rows.length ? `<section class="detail-block">${detailList(rows)}</section>` : ''}
     ${ticket.customChange ? `<section class="detail-block custom-change-review"><h3 class="subhead">${({ approved: '已审核通过', rejected: '未通过审核' })[ticket.resolution] ?? (ticket.status === 'closed' ? '已撤回修改' : '待审核修改')}</h3><p class="note">基于资料版本 V${ticket.customChange.revision} 提交</p>${customChangeComparison(ticket.customChange)}<details><summary>查看本次提交的完整资料</summary>${customRequestSnapshot(ticket.customChange.after)}</details><details><summary>对照原资料</summary>${customRequestSnapshot(ticket.customChange.before)}</details></section>` : ''}
     ${ticket.orderChange ? `<section class="detail-block"><h3 class="subhead">申请内容</h3>${orderChangeDiff(ticket.orderChange, ticket.status === 'closed')}</section>` : ''}
-    <section class="detail-block" aria-labelledby="ticket-activity-heading"><h3 class="subhead" id="ticket-activity-heading">沟通记录</h3>
-      <ol class="ticket-activity">${ticket.messages.map(message => `<li class="ticket-message ${message.by === 'support' ? 'ticket-message-support' : ''}">
-        <div class="panel-head"><strong>${names[message.by]}</strong><span class="note">${ticketTime(message.at)}</span></div>${message.text ? `<p>${e(message.text)}</p>` : ''}
-        ${message.files?.map(file => `<button class="link" type="button" data-action="download-evidence" data-id="${e(file.id)}" data-name="${e(file.name)}">${e(file.name)}</button>`).join('') ?? ''}
-      </li>`).join('')}</ol>
-    </section>
-    ${ticket.status === 'closed' ? '' : `<form class="detail-block" id="ticket-reply-form" data-id="${e(ticket.id)}">
-      <label class="field"><span>补充说明</span><textarea name="reply" rows="2" ${kind === 'tickets' ? 'required' : ''} maxlength="2000" placeholder="输入要补充的信息"></textarea></label>
-      ${kind === 'tickets' ? '' : evidenceField()}
-      <p class="error" role="alert" id="ticket-reply-error"></p>
-      <div class="panel-head"><button class="link ticket-close" type="button" data-action="close-ticket" data-id="${e(ticket.id)}">${ticket.orderChange || ticket.customChange ? '撤回申请' : '关闭' + (kind === 'tickets' ? '工单' : kind === 'claims' ? '索赔' : '申诉')}</button><button class="btn primary small" type="submit">添加回复</button></div>
-    </form>`}
   </div>`;
-  return managementDetail(title, body, ticket.id, ticketStatusBadge(ticket));
+  return managementDetail(title, information, ticket.id, ticketStatusBadge(ticket));
 }
 
-export function ticketsView(result, filter, selected, order, counts, emptyMessage, kind, bill, customRequest) {
+export function ticketConversationPanel(ticket, collapsed = false, kind = 'tickets') {
+  if (!ticket) return `<aside class="panel ticket-chat-dock ticket-chat-dock-empty"><p class="empty">选择一条记录查看沟通对话</p></aside>`;
+  const names = { customer: '你', support: 'HYE Freight 客服', system: '系统' };
+  const conversation = collapsed ? '' : `<div class="ticket-chat-dock-body">
+    <header class="ticket-conversation-head"><div><h3 class="subhead">${e(ticket.subject)}</h3><p class="note">${e(caseCategory(ticket))} · ${ticket.messages.length} 条消息</p></div></header>
+    <section class="ticket-chat" aria-label="沟通记录">
+      <ol class="ticket-chat-history" aria-label="工单沟通消息" aria-live="polite">${ticket.messages.map(message => {
+        const role = message.by === 'support' ? 'support' : message.by === 'system' ? 'system' : 'customer';
+        return `<li class="ticket-chat-row ticket-chat-row-${role}">
+          <article class="ticket-chat-bubble">
+            <div class="ticket-chat-meta"><strong>${names[message.by] || '你'}</strong>${ticketTime(message.at)}</div>
+            ${message.text ? `<p>${e(message.text)}</p>` : ''}
+            ${message.files?.map(file => `<button class="link" type="button" data-action="download-evidence" data-id="${e(file.id)}" data-name="${e(file.name)}">${e(file.name)}</button>`).join('') ?? ''}
+          </article>
+        </li>`;
+      }).join('')}</ol>
+    </section>
+    ${ticket.status === 'closed' ? '' : `<form class="detail-block ticket-chat-composer" id="ticket-reply-form" data-id="${e(ticket.id)}">
+      <div class="ticket-chat-input">
+        <label class="sr-only" for="ticket-reply">补充说明</label>
+        <textarea id="ticket-reply" name="reply" rows="2" ${kind === 'tickets' ? 'required' : ''} maxlength="2000" placeholder="输入要补充的信息"></textarea>
+        <button class="btn primary ticket-chat-send" type="submit" aria-label="发送回复">${icon('arrow')}<span>发送</span></button>
+      </div>
+      ${kind === 'tickets' ? '' : evidenceField()}
+      <p class="error" role="alert" id="ticket-reply-error"></p>
+      <div class="ticket-chat-composer-actions"><button class="link ticket-close" type="button" data-action="close-ticket" data-id="${e(ticket.id)}">${ticket.orderChange || ticket.customChange ? '撤回申请' : '关闭' + (kind === 'tickets' ? '工单' : kind === 'claims' ? '索赔' : '申诉')}</button></div>
+    </form>`}
+  </div>`;
+  return `<aside class="panel ticket-chat-dock${collapsed ? ' ticket-chat-dock-collapsed' : ''}" aria-label="工单沟通对话">
+    <header class="ticket-chat-dock-head">
+      ${collapsed ? `<button class="ticket-chat-dock-toggle" type="button" data-action="toggle-ticket-chat" aria-expanded="false" aria-label="展开沟通对话"><span aria-hidden="true">›</span><span class="ticket-chat-dock-toggle-label">沟通对话</span></button>` : `<div><h2 class="panel-title">沟通对话</h2><p class="note">${e(ticket.id)}</p></div><button class="ticket-chat-dock-toggle" type="button" data-action="toggle-ticket-chat" aria-expanded="true" aria-label="收起沟通对话">收起</button>`}
+    </header>${conversation}
+  </aside>`;
+}
+
+export function ticketsView(result, filter, selected, order, counts, emptyMessage, kind, bill, customRequest, chatCollapsed = false) {
   const { label, action } = caseTypes[kind];
   const search = kind === 'disputes' ? '搜索申诉号、账单号或主题' : '搜索编号、主题或关联记录';
   return managementPage({
@@ -1624,7 +1647,9 @@ export function ticketsView(result, filter, selected, order, counts, emptyMessag
     toolbar: managementToolbar(ticketStatuses, filter, counts, search,
       `<button class="btn primary small" type="button" data-action="${kind === 'tickets' ? 'new-ticket' : 'new-case'}" data-kind="${kind}">${icon('plus')} ${action}</button>`),
     headers: ['主题 / 编号', [kind === 'disputes' ? '关联账单 / 运单' : '关联记录', 'list-table-wide'], ['处理状态', 'list-table-status'], ['最近动态', 'list-table-medium ticket-table-activity']],
-    rows: ticketRows(result.rows, selected?.id, kind), detail: ticketDetail(selected, order, emptyMessage, kind, bill, customRequest)
+    rows: ticketRows(result.rows, selected?.id, kind),
+    sidePanel: ticketConversationPanel(selected, chatCollapsed, kind),
+    detail: ticketDetail(selected, order, emptyMessage, kind, bill, customRequest)
   });
 }
 
